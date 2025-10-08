@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Switch icon: rectangular with bidirectional arrows like your image -->
+  <defs>
+    <linearGradient id="switchGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="20" width="56" height="24" rx="3" fill="url(#switchGrad)" stroke="#1E40AF" stroke-width="2"/>
+  <!-- Left arrow (incoming) -->
+  <path d="M 14 26 L 8 32 L 14 38" fill="white" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+  <line x1="8" y1="32" x2="24" y2="32" stroke="white" stroke-width="2.5"/>
+  <!-- Right arrow (outgoing) -->
+  <path d="M 50 26 L 56 32 L 50 38" fill="white" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+  <line x1="40" y1="32" x2="56" y2="32" stroke="white" stroke-width="2.5"/>
+  <!-- Port indicators -->
+  <circle cx="28" cy="24" r="1.5" fill="white"/>
+  <circle cx="32" cy="24" r="1.5" fill="white"/>
+  <circle cx="36" cy="24" r="1.5" fill="white"/>
+</svg>

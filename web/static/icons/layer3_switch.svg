@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Layer 3 Switch: combination of switch + routing capability -->
+  <defs>
+    <linearGradient id="l3Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818CF8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366F1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="20" width="56" height="24" rx="3" fill="url(#l3Grad)" stroke="#4338CA" stroke-width="2"/>
+  <!-- Bidirectional arrows -->
+  <path d="M 14 26 L 8 32 L 14 38" fill="white" stroke="white" stroke-width="1.5"/>
+  <line x1="8" y1="32" x2="24" y2="32" stroke="white" stroke-width="2.5"/>
+  <path d="M 50 26 L 56 32 L 50 38" fill="white" stroke="white" stroke-width="1.5"/>
+  <line x1="40" y1="32" x2="56" y2="32" stroke="white" stroke-width="2.5"/>
+  <!-- L3 indicator -->
+  <text x="32" y="36" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">L3</text>
+</svg>

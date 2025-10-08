@@ -1,0 +1,177 @@
+/* Topologist UI Styles */
+
+/* Layout & Base */
+body {
+    font-family: ui-sans-serif, system-ui;
+    margin: 18px;
+    max-width: 1200px;
+}
+
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+input,
+select,
+button {
+    padding: 6px 10px;
+}
+
+button {
+    cursor: pointer;
+}
+
+/* Table */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+th,
+td {
+    border: 1px solid #e5e7eb;
+    padding: 8px;
+    vertical-align: top;
+}
+
+th {
+    background: #f8fafc;
+}
+
+/* Editable cells */
+td.editable-cell {
+    background: #f8fafc;
+    position: relative;
+}
+
+td.editable-cell.empty {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.inline-wrap,
+.pwd-wrap {
+    cursor: pointer;
+    min-width: 70px;
+}
+
+.inline-wrap.editing,
+.pwd-wrap.editing {
+    outline: 2px solid #6366F1;
+    border-radius: 4px;
+}
+
+.inline-wrap .txt,
+.pwd-wrap .pwd-mask {
+    display: inline-block;
+    min-height: 20px;
+}
+
+.inline-editor {
+    font-size: 13px;
+    padding: 3px 4px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.inline-placeholder {
+    color: #94a3b8;
+}
+
+.pwd-box {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.eye-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 12px;
+}
+
+/* Graph & Raw */
+#graph {
+    height: 520px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+/* Legend */
+.legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-icon {
+    width: 32px;
+    height: 32px;
+}
+
+pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 10px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+}
+
+/* Status Pills */
+.pill {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.s-ready {
+    background: #DCFCE7;
+}
+
+.s-discovered {
+    background: #FEF9C3;
+}
+
+.s-unknown {
+    background: #F1F5F9;
+}
+
+.s-needs_creds {
+    background: #FFE4E6;
+}
+
+.s-scanning {
+    background: #E0E7FF;
+}
+
+.s-error {
+    background: #FEE2E2;
+}
+
+/* Misc */
+small {
+    color: #64748b;
+}
+
+/* Host input width previously inline */
+#host {
+    min-width: 240px;
+}

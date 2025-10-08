@@ -1,0 +1,386 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Topologist</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+</head>
+
+<body>
+  <h1>Topologist</h1>
+  
+  <!-- Identities Management Section -->
+  <h3>🔐 Authentication Identities</h3>
+  <div class="row">
+    <input id="identityName" placeholder="Identity Name (e.g., Lab Creds)">
+    <input id="identityUsername" placeholder="username">
+    <input id="identityPassword" type="password" placeholder="password">
+    <button onclick="addIdentity()">Add Identity</button>
+    <span id="identityMsg"></span>
+  </div>
+  <table id="identitiesTbl" style="margin-bottom: 20px;">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Username</th>
+        <th>Default</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  
+  <h3>เพิ่มอุปกรณ์</h3>
+  <div class="row">
+    <input id="host" placeholder="Host/IP (เช่น 10.30.6.100)">
+    <select id="platform">
+      <option value="cisco_ios">cisco_ios</option>
+    </select>
+    <select id="identitySelect">
+      <option value="">-- Select Identity --</option>
+    </select>
+    <button onclick="add()">Add/Update</button>
+    <span id="msg"></span>
+  </div>
+  <h3>อุปกรณ์ (Inventory)</h3>
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>Host (IP)</th>
+        <th>Type</th>
+        <th>Display</th>
+        <th>Identity</th>
+        <th>Status</th>
+        <th>Depth</th>
+        <th>Parent</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <h3>Topology Snapshot</h3>
+  <div class="row">
+    <button onclick="discoverAllAndRefresh()">Discover All (ready)</button>
+    <button onclick="refreshTopo()">Refresh Topology</button>
+    <button onclick="clearTopology()">Clear Topology</button>
+    <label style="display:flex; align-items:center; gap:4px;">
+      <input type="checkbox" id="autoRefreshChk" onchange="toggleAutoRefresh()"> Auto refresh (5s)
+    </label>
+  </div>
+  
+  <!-- Device Type Legend -->
+  <div class="legend">
+    <div class="legend-item">
+      <img src="/static/icons/router.svg" class="legend-icon" alt="Router">
+      <span>Router</span>
+    </div>
+    <div class="legend-item">
+      <img src="/static/icons/switch.svg" class="legend-icon" alt="Switch">
+      <span>Switch</span>
+    </div>
+    <div class="legend-item">
+      <img src="/static/icons/layer3_switch.svg" class="legend-icon" alt="Layer 3 Switch">
+      <span>Layer 3 Switch</span>
+    </div>
+    <div class="legend-item">
+      <img src="/static/icons/firewall.svg" class="legend-icon" alt="Firewall">
+      <span>Firewall</span>
+    </div>
+    <div class="legend-item">
+      <img src="/static/icons/ap.svg" class="legend-icon" alt="Access Point">
+      <span>Access Point</span>
+    </div>
+    <div class="legend-item">
+      <img src="/static/icons/server.svg" class="legend-icon" alt="Server">
+      <span>Server</span>
+    </div>
+    <div class="legend-item">
+      <img src="/static/icons/end.svg" class="legend-icon" alt="End Device">
+      <span>End Device</span>
+    </div>
+  </div>
+  
+  <div id="graph"></div>
+  <h4>Raw</h4>
+  <pre id="raw"></pre>
+  <script>
+    async function api(path, opts) { const r = await fetch(path, opts); return r.json(); }
+    // Interval handle for topology auto refresh (checkbox-controlled)
+    let topoAutoTimer = null;
+    // Interval handle for table polling (always on)
+    let tablePollTimer = null;
+    
+    // ===== Identities Management =====
+    async function listIdentities() {
+      const data = await api('/api/identities');
+      const tb = document.querySelector('#identitiesTbl tbody');
+      tb.innerHTML = '';
+      
+      // Update the identity dropdown in add device form
+      const sel = document.getElementById('identitySelect');
+      sel.innerHTML = '<option value="">-- Select Identity --</option>';
+      
+      data.forEach(id => {
+        const tr = document.createElement('tr');
+        const isDefault = id.is_default || false;
+        const defaultBadge = isDefault ? '<span class="pill s-ready" style="font-size: 10px;">DEFAULT</span>' : '';
+        const defaultBtn = isDefault 
+          ? '<button onclick="unsetDefault()" style="font-size: 11px;">Unset Default</button>'
+          : `<button onclick="setDefault('${id._id}')" style="font-size: 11px;">Set as Default</button>`;
+        
+        tr.innerHTML = `
+          <td>${id.name}</td>
+          <td>${id.username}</td>
+          <td>${defaultBadge}</td>
+          <td>
+            ${defaultBtn}
+            <button onclick="delIdentity('${id._id}')">Delete</button>
+          </td>
+        `;
+        tb.appendChild(tr);
+        
+        // Add to dropdown
+        const opt = document.createElement('option');
+        opt.value = id._id;
+        opt.textContent = isDefault ? `${id.name} (default)` : id.name;
+        sel.appendChild(opt);
+      });
+    }
+    
+    async function setDefault(id) {
+      try {
+        await api(`/api/identities/${id}/set_default`, { method: 'POST' });
+        await listIdentities();
+      } catch (e) {
+        alert('Failed to set default: ' + e.message);
+      }
+    }
+    
+    async function unsetDefault() {
+      try {
+        await api('/api/identities/unset_default', { method: 'POST' });
+        await listIdentities();
+      } catch (e) {
+        alert('Failed to unset default: ' + e.message);
+      }
+    }
+    
+    async function addIdentity() {
+      const name = document.getElementById('identityName').value.trim();
+      const username = document.getElementById('identityUsername').value.trim();
+      const password = document.getElementById('identityPassword').value.trim();
+      const msg = document.getElementById('identityMsg');
+      
+      if (!name || !username || !password) {
+        msg.textContent = 'Please fill all fields';
+        return;
+      }
+      
+      try {
+        const r = await api('/api/identities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, username, password })
+        });
+        msg.textContent = r.message || 'Identity added';
+        document.getElementById('identityName').value = '';
+        document.getElementById('identityUsername').value = '';
+        document.getElementById('identityPassword').value = '';
+        await listIdentities();
+      } catch (e) {
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+    
+    async function delIdentity(id) {
+      if (!confirm('Delete this identity?')) return;
+      try {
+        await api('/api/identities/' + id, { method: 'DELETE' });
+        await listIdentities();
+      } catch (e) {
+        alert('Failed to delete: ' + e.message);
+      }
+    }
+    
+    // ===== Devices Management =====
+    function pill(t) { const map = { ready: 's-ready', discovered: 's-discovered', unknown: 's-unknown', needs_creds: 's-needs_creds', scanning: 's-scanning', error: 's-error' }; const cls = map[t] || 's-unknown'; return `<span class="pill ${cls}">${t || 'unknown'}</span>`; }
+    function escAttr(v) { return (v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;'); }
+    async function list() {
+      const data = await api('/api/devices'); const tb = document.querySelector('#tbl tbody'); tb.innerHTML = ''; data.forEach(d => {
+        const tr = document.createElement('tr'); tr.dataset.id = d._id; tr.innerHTML = `
+  <td>${d.host || '<i>(empty)</i>'}</td>
+  <td class="editable-cell ${(!d.device_type ? 'empty' : '')}">${deviceTypeSelect(d)}</td>
+  <td class="editable-cell">${inlineCell(d._id, 'display_name', d.display_name || '')}</td>
+  <td class="editable-cell ${(!d.identity_id ? 'empty' : '')}">${identitySelect(d)}</td>
+  <td>${pill(d.status)}</td>
+  <td>${d.depth ?? ''}</td>
+  <td>${d.parent ?? ''}</td>
+  <td><button onclick="delDev('${d._id}')">Delete</button></td>`; tb.appendChild(tr);
+      }); attachInlineHandlers();
+    }
+    function inlineCell(id, field, value, placeholderLabel) { const safe = escAttr(value || ''); const placeholder = safe ? '' : `<span class='inline-placeholder'>(${placeholderLabel || field})</span>`; return `<div class="inline-wrap" data-field="${field}" data-id="${id}"><span class="txt">${safe || ''}${placeholder}</span><input class="inline-editor" value="${safe}" style="display:none;" placeholder="${placeholderLabel || field}"></div>`; }
+    function deviceTypeSelect(d) {
+      const val = d.device_type || '';
+      const opts = ['', 'router', 'switch', 'layer3_switch', 'end', 'firewall', 'ap', 'server']
+        .map(o => `<option value="${o}" ${o === val ? 'selected' : ''}>${o || '(type)'}</option>`).join('');
+      return `<select data-id="${d._id}" data-field="device_type" class="devtype-select">${opts}</select>`;
+    }
+    function identitySelect(d) {
+      const currentId = d.identity_id || '';
+      const currentName = d.identity_name || '(select)';
+      // We'll populate options dynamically when this dropdown is clicked
+      return `<select data-id="${d._id}" data-field="identity_id" class="identity-select" data-current="${currentId}">
+        <option value="${currentId}">${currentName}</option>
+      </select>`;
+    }
+    async function commitInline(id, field, val) { try { await api(`/api/devices/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: val }) }); } catch (e) { console.error('inline update failed', e); } await list(); }
+    async function add() { 
+      const hostInput = document.getElementById('host');
+      const platformInput = document.getElementById('platform');
+      const identityInput = document.getElementById('identitySelect');
+      const msgSpan = document.getElementById('msg');
+      
+      const payload = { 
+        host: hostInput.value.trim(), 
+        platform: platformInput.value, 
+        identity_id: identityInput.value || null,
+        device_type: null 
+      }; 
+      
+      if (!payload.host) {
+        msgSpan.textContent = 'Host/IP required';
+        return;
+      }
+      
+      const r = await api('/api/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); 
+      msgSpan.textContent = r.message || JSON.stringify(r); 
+      hostInput.value = '';
+      await list(); 
+    }
+    async function delDev(id) { await api('/api/devices/' + id, { method: 'DELETE' }); await list(); }
+    
+    function attachInlineHandlers() {
+      document.querySelectorAll('.inline-wrap').forEach(w => {
+        const span = w.querySelector('.txt'); const inp = w.querySelector('.inline-editor');
+        const td = w.closest('td');
+        const startEdit = () => { w.classList.add('editing'); td.classList.remove('empty'); span.style.display = 'none'; inp.style.display = 'inline-block'; inp.focus(); inp.select(); };
+        span.onclick = startEdit;
+        w.onclick = (e) => { if (e.target === w) startEdit(); };
+        inp.onblur = async () => { w.classList.remove('editing'); await commitInline(w.dataset.id, w.dataset.field, inp.value); };
+        inp.onkeydown = async (e) => { if (e.key === 'Enter') { inp.blur(); } else if (e.key === 'Escape') { inp.value = span.textContent; inp.blur(); } };
+      });
+      // device_type dropdowns
+      document.querySelectorAll('select.devtype-select').forEach(sel => {
+        sel.onfocus = () => { sel.classList.add('dropdown-open'); };
+        sel.onblur = () => { sel.classList.remove('dropdown-open'); };
+        sel.onchange = async () => { 
+          sel.classList.remove('dropdown-open');
+          await commitInline(sel.dataset.id, 'device_type', sel.value || null); 
+        };
+      });
+      // identity dropdowns - populate on focus
+      document.querySelectorAll('select.identity-select').forEach(sel => {
+        sel.onfocus = async () => {
+          sel.classList.add('dropdown-open');
+          // Load all identities and populate dropdown
+          const identities = await api('/api/identities');
+          const currentId = sel.dataset.current || '';
+          sel.innerHTML = '<option value="">(none)</option>';
+          identities.forEach(id => {
+            const opt = document.createElement('option');
+            opt.value = id._id;
+            opt.textContent = id.name;
+            if (id._id === currentId) opt.selected = true;
+            sel.appendChild(opt);
+          });
+        };
+        sel.onblur = () => { sel.classList.remove('dropdown-open'); };
+        sel.onchange = async () => { 
+          sel.classList.remove('dropdown-open');
+          await commitInline(sel.dataset.id, 'identity_id', sel.value || null); 
+        };
+      });
+    }
+    async function commitInline(id, field, val) { try { await api(`/api/devices/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: val }) }); } catch (e) { console.error('inline update failed', e); } await list(); }
+    async function delDev(id) { await api('/api/devices/' + id, { method: 'DELETE' }); await list(); }
+    async function discoverAll() { try { await api('/api/discover_all', { method: 'POST' }); } catch (e) { alert('Failed to queue discover all: ' + e); } }
+    async function discoverAllAndRefresh() { await discoverAll(); await list(); await refreshTopo(); }
+    async function clearTopology() { if (!confirm('Clear topology graph & history?')) return; try { await api('/api/topology/clear', { method: 'POST' }); await refreshTopo(); } catch (e) { alert('Clear failed: ' + e); } }
+    function toggleAutoRefresh() {
+      // Only affects topology graph + raw JSON
+      const chk = document.getElementById('autoRefreshChk');
+      if (chk.checked) {
+        // Refresh topology every 5 seconds (table already has its own 1s poll)
+        topoAutoTimer = setInterval(() => { refreshTopo(); }, 5000);
+      } else {
+        if (topoAutoTimer) clearInterval(topoAutoTimer);
+        topoAutoTimer = null;
+      }
+    }
+    const cy = cytoscape({
+      container: document.getElementById('graph'),
+      layout: { name: 'cose' },
+      style: [
+        { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'transparent', 'background-opacity': 0, 'background-clip': 'none', 'border-width': 0, 'color': '#000', 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 8, 'font-size': 12, 'text-wrap': 'wrap', 'text-max-width': 90, 'width': 64, 'height': 64 } },
+        // Icon images by device_type
+        { selector: 'node[device_type = "router"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/router.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+        { selector: 'node[device_type = "switch"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/switch.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+        { selector: 'node[device_type = "layer3_switch"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/layer3_switch.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+        { selector: 'node[device_type = "firewall"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/firewall.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+        { selector: 'node[device_type = "ap"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/ap.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+        { selector: 'node[device_type = "server"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/server.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+        { selector: 'node[device_type = "end"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/end.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+        {
+          selector: 'edge',
+          style: {
+            'line-color': '#94A3B8',
+            'width': 2,
+            // Per-endpoint labels
+            'source-label': 'data(ifSrc)',
+            'target-label': 'data(ifDst)',
+            'font-size': 14,
+            'source-text-offset': 12,
+            'target-text-offset': 12,
+            'text-background-color': '#ffffff',
+            'text-background-opacity': 0.8,
+            'text-background-shape': 'roundrectangle',
+            'text-border-opacity': 0,
+            'curve-style': 'bezier'
+          }
+        }
+      ]
+    });
+    async function refreshTopo() {
+      const data = await api('/api/topology/graph');
+      document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+      const nodes = (data.nodes || []).map(n => ({ data: { id: n.id, label: (n.label || n.id), device_type: n.device_type || '' } }));
+      const edges = (data.links || []).map(e => ({
+        data: {
+          id: `${e.source}-${e.target}-${e.ifSrc || ''}-${e.ifDst || ''}`,
+          source: e.source,
+          target: e.target,
+          ifSrc: e.ifSrc || '',
+          ifDst: e.ifDst || ''
+        }
+      }));
+      cy.elements().remove();
+      cy.add(nodes.concat(edges));
+      cy.layout({ name: 'cose' }).run();
+    }
+    // Initial load
+    listIdentities();
+    list();
+    refreshTopo();
+    // Continuous table polling every 1 second (lightweight endpoints recommended)
+    tablePollTimer = setInterval(() => {
+      // Avoid overwriting an active inline edit or open dropdown: only refresh if nothing is being edited
+      if (!document.querySelector('.inline-wrap.editing, .dropdown-open')) {
+        list();
+      }
+    }, 1000);
+  </script>
+</body>
+
+</html>
