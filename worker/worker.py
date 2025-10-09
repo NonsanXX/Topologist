@@ -408,6 +408,35 @@ def enqueue_discovery(device_id, depth, auto_recursive, max_depth):
     ch.basic_publish(exchange="", routing_key="discovery", body=json.dumps(job))
     conn.close()
 
+def trigger_discover_all():
+    """Trigger discover_all by enqueueing discovery jobs for all ready/error devices."""
+    try:
+        devices = list(db.devices.find({"status": {"$in": ["ready", "error"]}}, {"_id": 1, "depth": 1}))
+        if not devices:
+            print("[AUTO DISCOVER] No devices to discover")
+            return
+        
+        conn = connect_to_rabbitmq(max_retries=3, initial_delay=1)
+        ch = conn.channel()
+        ch.queue_declare(queue="discovery", durable=True)
+        
+        count = 0
+        for d in devices:
+            job = {
+                "type": "discovery",
+                "device_id": str(d["_id"]),
+                "depth": int(d.get("depth", 0)),
+                "auto_recursive": False,
+                "max_depth": 3
+            }
+            ch.basic_publish(exchange="", routing_key="discovery", body=json.dumps(job))
+            count += 1
+        
+        conn.close()
+        print(f"[AUTO DISCOVER] Queued {count} devices for discovery")
+    except Exception as e:
+        print(f"[AUTO DISCOVER] Error: {e}")
+
 def do_discovery_job(job):
     oid = ObjectId(job["device_id"])
     depth = int(job.get("depth",0))
@@ -518,6 +547,9 @@ def do_discovery_job(job):
         default_password = default_identity["password"] if default_identity else None
         default_status = "ready" if (default_username and default_password) else "needs_creds"
         
+        # Track if we added any new devices
+        new_devices_added = False
+        
         # เพื่อนบ้าน → เพิ่มลง devices ด้วย host = management IP (ถ้ามี)
         for link in links:
             r_ip = link.get("remote_mgmt_ip")
@@ -541,6 +573,7 @@ def do_discovery_job(job):
                         "device_type": r_type if r_type != 'unknown' else None,
                         "created_at": time.time(), "last_seen": None
                     })
+                    new_devices_added = True
                 continue
 
             # มี IP → ใช้ IP เป็น host
@@ -558,6 +591,7 @@ def do_discovery_job(job):
                     "created_at": time.time(), "last_seen": None
                 }
                 new_id = db.devices.insert_one(new).inserted_id
+                new_devices_added = True
                 if auto_recursive and (depth+1) <= max_depth:
                     enqueue_discovery(str(new_id), depth+1, auto_recursive, max_depth)
             else:
@@ -572,6 +606,11 @@ def do_discovery_job(job):
                     upd["device_type"] = r_type
                 if upd:
                     db.devices.update_one({"_id": existing["_id"]}, {"$set": upd})
+        
+        # If we added new devices, trigger discover_all to cascade discovery
+        if new_devices_added:
+            print(f"[DISCOVERY] New devices added, triggering cascading discovery")
+            trigger_discover_all()
 
     except Exception as e:
         print("discovery error:", e)
