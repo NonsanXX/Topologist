@@ -9,15 +9,29 @@ RABBIT_HOST = os.getenv("RABBIT_HOST","rabbitmq")
 db = pymongo.MongoClient(MONGO_URI)[DB_NAME]
 
 def build_graph(seed_ip, links):
-    """links: list of dicts from parser (local_if, remote_sysname, remote_port, remote_mgmt_ip)"""
+    """links: list of dicts from parser (local_if, remote_sysname, remote_port, remote_mgmt_ip)
+    
+    Supports both IP-based and name-based node identifiers.
+    - If remote device has mgmt IP: use IP as node ID
+    - If no IP: use 'name:<remote_sysname>' as node ID
+    """
     nodes = set([seed_ip])
     edges = set()
     for link in links:
         r_ip = link.get("remote_mgmt_ip")
-        if not r_ip:
+        r_name = link.get("remote_sysname")
+        
+        # Create node ID: prefer IP, fallback to name-based identifier
+        if r_ip:
+            remote_id = r_ip
+        elif r_name:
+            remote_id = f"name:{r_name}"
+        else:
+            # Skip if neither IP nor name available
             continue
-        nodes.add(r_ip)
-        a, b = sorted([seed_ip, r_ip])
+        
+        nodes.add(remote_id)
+        a, b = sorted([seed_ip, remote_id])
         if a == seed_ip:
             edges.add((a, b, link.get("local_if"), link.get("remote_port")))
         else:
@@ -27,24 +41,42 @@ def build_graph(seed_ip, links):
     ]
 
 def upsert_graph(seed_ip, links):
+    """Upsert nodes and edges to graph_nodes and graph_links collections.
+    
+    Supports both IP-based and name-based node identifiers.
+    """
     now = time.time()
     for link in links:
         r_ip = link.get("remote_mgmt_ip")
-        if not r_ip:
+        r_name = link.get("remote_sysname")
+        
+        # Create remote node ID: prefer IP, fallback to name-based identifier
+        if r_ip:
+            remote_id = r_ip
+        elif r_name:
+            remote_id = f"name:{r_name}"
+        else:
+            # Skip if neither IP nor name available
             continue
+        
+        # Upsert seed node (always IP-based)
         db.graph_nodes.update_one(
             {"_id": seed_ip},
             {"$set": {"id": seed_ip, "last_seen": now}, "$setOnInsert": {"first_seen": now}},
             upsert=True
         )
+        
+        # Upsert remote node (IP or name-based)
         db.graph_nodes.update_one(
-            {"_id": r_ip},
-            {"$set": {"id": r_ip, "last_seen": now}, "$setOnInsert": {"first_seen": now}},
+            {"_id": remote_id},
+            {"$set": {"id": remote_id, "last_seen": now}, "$setOnInsert": {"first_seen": now}},
             upsert=True
         )
-        a, b = sorted([seed_ip, r_ip])
+        
+        # Create edge
+        a, b = sorted([seed_ip, remote_id])
         if_a = link.get("local_if") if a == seed_ip else link.get("remote_port")
-        if_b = link.get("remote_port") if b == r_ip else link.get("local_if")
+        if_b = link.get("remote_port") if b == remote_id else link.get("local_if")
         edge_id = f"{a}|{b}"
         db.graph_links.update_one(
             {"_id": edge_id},
@@ -84,6 +116,13 @@ def do_discovery_job(job):
     try:
         # ต้องมี IP + creds
         seed_ip = dev["host"]
+        
+        # Skip devices without IP address
+        if not seed_ip or seed_ip.strip() == "":
+            db.devices.update_one({"_id": oid},{"$set":{"status":"needs_ip","last_seen":time.time()}})
+            print(f"no IP for device {dev.get('display_name', oid)}"); 
+            return
+        
         if not dev.get("username") or not dev.get("password"):
             db.devices.update_one({"_id": oid},{"$set":{"status":"needs_creds"}})
             print("no creds for", seed_ip); return

@@ -243,16 +243,45 @@ def api_discover(payload:dict=Body(...)):
 # ----- Global Graph -----
 @app.get("/api/topology/graph")
 def topology_graph():
-    # nodes keyed by IP (graph_nodes._id). Attach display label (display_name > host > id)
+    """Nodes keyed by IP or name-based identifier (graph_nodes._id).
+    
+    Node IDs can be:
+    - IP address (e.g., "10.0.15.46")
+    - Name-based (e.g., "name:Switch")
+    
+    Attach display label and device_type from devices collection.
+    """
     nodes = []
     for n in db.graph_nodes.find({}, {"_id": 1}):
-        ip = n["_id"]
-        dev = db.devices.find_one({"host": ip}, {"display_name": 1, "host": 1, "device_type": 1})
-        if dev:
-            label = dev.get("display_name") or dev.get("host") or ip
+        node_id = n["_id"]
+        
+        # Determine if this is an IP-based or name-based node
+        if node_id.startswith("name:"):
+            # Name-based node: extract the device name
+            device_name = node_id[5:]  # Remove "name:" prefix
+            # Look up by display_name or host field
+            dev = db.devices.find_one(
+                {"$or": [{"display_name": device_name}, {"host": ""}]},
+                {"display_name": 1, "host": 1, "device_type": 1}
+            )
+            if dev:
+                label = dev.get("display_name") or device_name
+                device_type = dev.get("device_type")
+            else:
+                label = device_name
+                device_type = None
         else:
-            label = ip
-        nodes.append({"id": ip, "label": label, "device_type": (dev.get("device_type") if dev else None)})
+            # IP-based node: look up by host (IP)
+            dev = db.devices.find_one({"host": node_id}, {"display_name": 1, "host": 1, "device_type": 1})
+            if dev:
+                label = dev.get("display_name") or dev.get("host") or node_id
+                device_type = dev.get("device_type")
+            else:
+                label = node_id
+                device_type = None
+        
+        nodes.append({"id": node_id, "label": label, "device_type": device_type})
+    
     edges = []
     for e in db.graph_links.find({}, {"_id": 0, "a": 1, "b": 1, "ifA": 1, "ifB": 1}):
         edges.append({
