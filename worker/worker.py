@@ -1,12 +1,285 @@
 import os, json, time, pika, pymongo
 from bson.objectid import ObjectId
 from netmiko import ConnectHandler
+from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
 from parsers import parse_lldp_cisco, parse_cdp_cisco
 
 MONGO_URI   = os.getenv("MONGO_URI","mongodb://mongo:27017")
 DB_NAME     = os.getenv("DB_NAME","topologist")
 RABBIT_HOST = os.getenv("RABBIT_HOST","rabbitmq")
 db = pymongo.MongoClient(MONGO_URI)[DB_NAME]
+
+def connect_to_rabbitmq(max_retries=10, initial_delay=1):
+    """Connect to RabbitMQ with retry logic and exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of connection attempts (0 = infinite)
+        initial_delay: Initial delay in seconds between retries
+    
+    Returns:
+        pika.BlockingConnection: Connected RabbitMQ connection
+    """
+    delay = initial_delay
+    attempt = 0
+    
+    while max_retries == 0 or attempt < max_retries:
+        try:
+            attempt += 1
+            print(f"[RabbitMQ] Connection attempt {attempt}...")
+            conn = pika.BlockingConnection(pika.ConnectionParameters(
+                host=RABBIT_HOST,
+                heartbeat=600,
+                blocked_connection_timeout=300
+            ))
+            print(f"[RabbitMQ] Connected successfully!")
+            return conn
+        except (pika.exceptions.AMQPConnectionError, pika.exceptions.ConnectionClosedByBroker) as e:
+            if max_retries > 0 and attempt >= max_retries:
+                print(f"[RabbitMQ] Failed after {max_retries} attempts")
+                raise
+            print(f"[RabbitMQ] Connection failed: {e}")
+            print(f"[RabbitMQ] Retrying in {delay} seconds...")
+            time.sleep(delay)
+            delay = min(delay * 2, 30)  # Exponential backoff, max 30 seconds
+
+def get_reachable_devices():
+    """Get list of devices that were successfully connected to (status=ready or scanning).
+    
+    Returns:
+        list: List of device documents that can potentially be used as jump hosts
+    """
+    return list(db.devices.find({
+        "status": {"$in": ["ready", "scanning"]},
+        "host": {"$exists": True, "$ne": ""}
+    }))
+
+def get_directly_reachable_devices():
+    """Get list of devices that can be reached directly from this PC (depth=0 and ready).
+    
+    These are devices that we can connect to without going through any jump hosts.
+    
+    Returns:
+        list: List of device documents that are directly reachable
+    """
+    return list(db.devices.find({
+        "status": {"$in": ["ready", "scanning"]},
+        "host": {"$exists": True, "$ne": ""},
+        "depth": 0  # Only devices at depth 0 can be reached directly
+    }))
+
+def find_path_to_device(target_ip, reachable_devices):
+    """Find a path to reach target_ip through intermediate jump hosts.
+    
+    Uses breadth-first search through the topology graph to find shortest path.
+    Prioritizes paths from devices that can be directly connected to.
+    
+    Args:
+        target_ip: IP address of target device to reach
+        reachable_devices: List of devices that we can potentially use as jump hosts
+        
+    Returns:
+        list: List of device IPs forming a path from a directly reachable device to target,
+              or None if no path found
+    """
+    if not reachable_devices:
+        return None
+    
+    # Build adjacency list from graph_links
+    graph = {}
+    links = db.graph_links.find({})
+    for link in links:
+        a, b = link["a"], link["b"]
+        if a not in graph:
+            graph[a] = []
+        if b not in graph:
+            graph[b] = []
+        graph[a].append(b)
+        graph[b].append(a)
+    
+    # First, try to find devices at depth=0 (directly reachable)
+    directly_reachable = get_directly_reachable_devices()
+    depth0_ips = {d["host"] for d in directly_reachable}
+    
+    # If no depth=0 devices, try all ready devices (they might be reachable)
+    if not depth0_ips:
+        print("[PATH FINDING] No depth=0 devices, trying all ready devices")
+        depth0_ips = {d["host"] for d in reachable_devices if d["status"] == "ready"}
+    
+    if not depth0_ips:
+        print("[PATH FINDING] No reachable starting points found")
+        return None
+    
+    print(f"[PATH FINDING] Starting BFS from reachable devices: {depth0_ips}")
+    
+    # Try to find shortest path from any directly reachable device
+    # Sort by preference: depth=0 devices first
+    best_path = None
+    
+    for start_ip in sorted(depth0_ips):
+        if start_ip == target_ip:
+            return [target_ip]  # Already directly reachable
+        
+        # BFS from this starting point
+        queue = [(start_ip, [start_ip])]
+        visited = {start_ip}
+        
+        while queue:
+            current, path = queue.pop(0)
+            
+            if current not in graph:
+                continue
+                
+            for neighbor in graph[current]:
+                if neighbor in visited:
+                    continue
+                    
+                visited.add(neighbor)
+                new_path = path + [neighbor]
+                
+                if neighbor == target_ip:
+                    # Found a path! Check if it's better than current best
+                    if best_path is None or len(new_path) < len(best_path):
+                        best_path = new_path
+                        print(f"[PATH FINDING] Found path of length {len(new_path)}: {' -> '.join(new_path)}")
+                    break  # Found path from this starting point
+                    
+                queue.append((neighbor, new_path))
+    
+    return best_path
+
+def connect_with_jump_hosts(target_device, jump_path):
+    """Connect to a device through a chain of SSH jump hosts.
+    
+    Args:
+        target_device: Device document for the target to connect to
+        jump_path: List of IP addresses forming path [jump1, jump2, ..., target]
+        
+    Returns:
+        ConnectHandler: Connected Netmiko session, or None if connection fails
+    """
+    if not jump_path or len(jump_path) < 2:
+        return None
+    
+    print(f"[SSH CHAIN] Attempting connection via path: {' -> '.join(jump_path)}")
+    
+    try:
+        # Connect to the first jump host (directly reachable)
+        jump_host_ip = jump_path[0]
+        jump_device = db.devices.find_one({"host": jump_host_ip})
+        
+        if not jump_device or not jump_device.get("username") or not jump_device.get("password"):
+            print(f"[SSH CHAIN] Missing credentials for jump host {jump_host_ip}")
+            return None
+        
+        # Connect to first hop
+        conn = ConnectHandler(
+            device_type=jump_device.get("platform", "cisco_ios"),
+            host=jump_host_ip,
+            username=jump_device["username"],
+            password=jump_device["password"],
+            fast_cli=True
+        )
+        
+        print(f"[SSH CHAIN] Connected to jump host {jump_host_ip}")
+        
+        # Now SSH through each intermediate hop to reach the target
+        for hop_index in range(1, len(jump_path)):
+            next_ip = jump_path[hop_index]
+            
+            # Get credentials for the next hop
+            if hop_index == len(jump_path) - 1:
+                # This is the target device
+                next_username = target_device.get('username', 'admin')
+                next_password = target_device.get('password', '')
+            else:
+                # This is an intermediate hop
+                next_device = db.devices.find_one({"host": next_ip})
+                if not next_device or not next_device.get("username") or not next_device.get("password"):
+                    print(f"[SSH CHAIN] Missing credentials for intermediate hop {next_ip}")
+                    conn.disconnect()
+                    return None
+                next_username = next_device["username"]
+                next_password = next_device["password"]
+            
+            # SSH to the next hop
+            ssh_cmd = f"ssh -l {next_username} {next_ip}"
+            print(f"[SSH CHAIN] Hop {hop_index}: {jump_path[hop_index-1]} -> {next_ip}")
+            print(f"[SSH CHAIN] Sending: {ssh_cmd}")
+            
+            # Send SSH command and wait for output
+            output = conn.send_command_timing(ssh_cmd, delay_factor=4, read_timeout=20)
+            print(f"[SSH CHAIN] Initial output: {repr(output[:300])}")
+            
+            # Handle various prompts
+            max_attempts = 10
+            attempt = 0
+            connected = False
+            
+            while attempt < max_attempts:
+                attempt += 1
+                
+                # Check for password prompt (case insensitive) - check this FIRST before anything else
+                if "password:" in output.lower():
+                    print(f"[SSH CHAIN] Password prompt detected, sending password")
+                    output = conn.send_command_timing(next_password, delay_factor=3, read_timeout=15)
+                    print(f"[SSH CHAIN] After password: {repr(output[:300])}")
+                    # Continue to check for prompt below
+                
+                # Check for yes/no prompt for SSH key
+                if "(yes/no" in output.lower() or "continue connecting" in output.lower():
+                    print(f"[SSH CHAIN] SSH key prompt detected, sending 'yes'")
+                    output = conn.send_command_timing("yes", delay_factor=2, read_timeout=10)
+                    print(f"[SSH CHAIN] After 'yes': {repr(output[:300])}")
+                    # Continue to check for password below
+                
+                # Check if we got a prompt (successful connection)
+                if "#" in output or ">" in output:
+                    # Make sure it's actually a prompt at the end of a line
+                    lines = output.strip().split('\n')
+                    last_line = lines[-1] if lines else ""
+                    print(f"[SSH CHAIN] Checking last line: {repr(last_line)}")
+                    
+                    if last_line.strip().endswith('#') or last_line.strip().endswith('>'):
+                        print(f"[SSH CHAIN] Successfully connected to {next_ip}")
+                        print(f"[SSH CHAIN] Prompt: {last_line}")
+                        connected = True
+                        break
+                
+                # If output is empty or no clear state, wait and read more
+                if not output or len(output.strip()) == 0:
+                    print(f"[SSH CHAIN] Empty output, waiting for data...")
+                    time.sleep(2)
+                    output = conn.send_command_timing("", delay_factor=2, read_timeout=10)
+                    print(f"[SSH CHAIN] After wait: {repr(output[:300])}")
+                else:
+                    # Got some output but no password/prompt yet, keep waiting
+                    print(f"[SSH CHAIN] Waiting for password prompt or device prompt...")
+                    time.sleep(1)
+                    output += conn.send_command_timing("", delay_factor=1, read_timeout=10)
+                    print(f"[SSH CHAIN] Accumulated output: {repr(output[:300])}")
+            
+            if not connected:
+                print(f"[SSH CHAIN] Failed to connect to {next_ip} after {max_attempts} attempts")
+                print(f"[SSH CHAIN] Final output: {repr(output)}")
+                conn.disconnect()
+                return None
+        
+        # Successfully connected through all hops to target
+        target_ip = jump_path[-1]
+        print(f"[SSH CHAIN] Successfully reached target {target_ip} through path: {' -> '.join(jump_path)}")
+        
+        # Mark this as a proxy connection
+        conn._proxy_mode = True
+        conn._target_ip = target_ip
+        conn._jump_path = jump_path
+        
+        return conn
+            
+    except Exception as e:
+        print(f"[SSH CHAIN] Error connecting through jump hosts: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def connect_to_rabbitmq(max_retries=10, initial_delay=1):
     """Connect to RabbitMQ with retry logic and exponential backoff.
@@ -146,6 +419,10 @@ def do_discovery_job(job):
         print("device missing", oid); return
 
     db.devices.update_one({"_id": oid},{"$set":{"status":"scanning","last_seen":time.time()}})
+    
+    conn = None
+    used_proxy = False
+    
     try:
         # ต้องมี IP + creds
         seed_ip = dev["host"]
@@ -160,17 +437,57 @@ def do_discovery_job(job):
             db.devices.update_one({"_id": oid},{"$set":{"status":"needs_creds"}})
             print("no creds for", seed_ip); return
 
-        conn = ConnectHandler(
-            device_type=dev.get("platform","cisco_ios"),
-            host=seed_ip, username=dev["username"], password=dev["password"], fast_cli=True
-        )
+        # Try direct connection first
+        try:
+            print(f"[DISCOVERY] Attempting direct connection to {seed_ip}")
+            conn = ConnectHandler(
+                device_type=dev.get("platform","cisco_ios"),
+                host=seed_ip, 
+                username=dev["username"], 
+                password=dev["password"], 
+                fast_cli=True,
+                timeout=10,
+                conn_timeout=10
+            )
+            print(f"[DISCOVERY] Direct connection successful to {seed_ip}")
+        except Exception as direct_err:
+            print(f"[DISCOVERY] Direct connection failed to {seed_ip}: {direct_err}")
+            
+            # Try to find a path through jump hosts
+            print(f"[DISCOVERY] Attempting SSH chain discovery for {seed_ip}")
+            reachable = get_reachable_devices()
+            path = find_path_to_device(seed_ip, reachable)
+            
+            if path and len(path) >= 2:
+                print(f"[DISCOVERY] Found path to {seed_ip}: {' -> '.join(path)}")
+                conn = connect_with_jump_hosts(dev, path)
+                if conn:
+                    used_proxy = True
+                    print(f"[DISCOVERY] SSH chain connection successful to {seed_ip}")
+                else:
+                    raise Exception(f"SSH chain connection failed through path: {' -> '.join(path)}")
+            else:
+                print(f"[DISCOVERY] No path found to {seed_ip}")
+                raise Exception(f"Device unreachable: {direct_err}")
+
+        if not conn:
+            raise Exception("Failed to establish connection")
 
         # ดึง CDP ก่อนเพื่อใช้ capability เป็นหลัก (ตามคำขอ) แล้วค่อย fallback LLDP ถ้า CDP ว่าง
-        out = conn.send_command("show cdp neighbors detail", expect_string=r"#")
+        if used_proxy:
+            # In proxy mode, we're tunneled through SSH, use send_command_timing instead
+            out = conn.send_command_timing("show cdp neighbors detail", delay_factor=4, read_timeout=30)
+        else:
+            out = conn.send_command("show cdp neighbors detail", expect_string=r"#")
+            
         links = parse_cdp_cisco(out)
         used_proto = "cdp"
+        
         if not links:
-            out = conn.send_command("show lldp neighbors detail", expect_string=r"#")
+            if used_proxy:
+                out = conn.send_command_timing("show lldp neighbors detail", delay_factor=4, read_timeout=30)
+            else:
+                out = conn.send_command("show lldp neighbors detail", expect_string=r"#")
             links = parse_lldp_cisco(out)
             # ล้าง device_type จาก LLDP เพื่อไม่ให้ override (CDP-only classification)
             for l in links:
@@ -178,7 +495,11 @@ def do_discovery_job(job):
             used_proto = "lldp_fallback"
 
         # สถานะพอร์ต
-        brief = conn.send_command("show ip interface brief", expect_string=r"#")
+        if used_proxy:
+            brief = conn.send_command_timing("show ip interface brief", delay_factor=4, read_timeout=30)
+        else:
+            brief = conn.send_command("show ip interface brief", expect_string=r"#")
+            
         conn.disconnect()
 
         # topology ใช้ IP เท่านั้น
@@ -187,7 +508,8 @@ def do_discovery_job(job):
         upsert_graph(seed_ip, links)     # ← เพิ่มบรรทัดนี้
         db.devices.update_one({"_id": oid},{"$set":{"status":"ready","last_seen":time.time()}})
 
-        print(f"[DISCOVERY] seed={seed_ip} protocol={used_proto} neighbors={len(links)}")
+        conn_method = "proxy" if used_proxy else "direct"
+        print(f"[DISCOVERY] seed={seed_ip} method={conn_method} protocol={used_proto} neighbors={len(links)}")
         
         # Get default identity if exists
         default_identity = db.identities.find_one({"is_default": True})
@@ -254,6 +576,11 @@ def do_discovery_job(job):
     except Exception as e:
         print("discovery error:", e)
         db.devices.update_one({"_id": oid},{"$set":{"status":"error","error":str(e),"last_seen":time.time()}})
+        if conn:
+            try:
+                conn.disconnect()
+            except:
+                pass
 
 def consume():
     """Main consumer loop with automatic reconnection on connection failure."""

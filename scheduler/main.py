@@ -59,10 +59,11 @@ def discover(payload: dict = Body(...)):
 
 @app.post("/discover_all")
 def discover_all():
-    """enqueue discovery สำหรับทุก device ที่พร้อม (status=ready)"""
-    ready = list(db.devices.find({"status": "ready"}, {"_id": 1, "depth": 1}))
+    """enqueue discovery for all devices that are ready or had errors (to retry)"""
+    # Include both ready and error devices for automatic retry
+    devices = list(db.devices.find({"status": {"$in": ["ready", "error"]}}, {"_id": 1, "depth": 1, "status": 1}))
     count = 0
-    for d in ready:
+    for d in devices:
         job = {
             "type": "discovery",
             "device_id": str(d["_id"]),
@@ -72,4 +73,4 @@ def discover_all():
         }
         enqueue("discovery", job)
         count += 1
-    return {"queued": count}
+    return {"queued": count, "note": "Included ready and error devices for retry"}
