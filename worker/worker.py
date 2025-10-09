@@ -8,6 +8,39 @@ DB_NAME     = os.getenv("DB_NAME","topologist")
 RABBIT_HOST = os.getenv("RABBIT_HOST","rabbitmq")
 db = pymongo.MongoClient(MONGO_URI)[DB_NAME]
 
+def connect_to_rabbitmq(max_retries=10, initial_delay=1):
+    """Connect to RabbitMQ with retry logic and exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of connection attempts (0 = infinite)
+        initial_delay: Initial delay in seconds between retries
+    
+    Returns:
+        pika.BlockingConnection: Connected RabbitMQ connection
+    """
+    delay = initial_delay
+    attempt = 0
+    
+    while max_retries == 0 or attempt < max_retries:
+        try:
+            attempt += 1
+            print(f"[RabbitMQ] Connection attempt {attempt}...")
+            conn = pika.BlockingConnection(pika.ConnectionParameters(
+                host=RABBIT_HOST,
+                heartbeat=600,
+                blocked_connection_timeout=300
+            ))
+            print(f"[RabbitMQ] Connected successfully!")
+            return conn
+        except (pika.exceptions.AMQPConnectionError, pika.exceptions.ConnectionClosedByBroker) as e:
+            if max_retries > 0 and attempt >= max_retries:
+                print(f"[RabbitMQ] Failed after {max_retries} attempts")
+                raise
+            print(f"[RabbitMQ] Connection failed: {e}")
+            print(f"[RabbitMQ] Retrying in {delay} seconds...")
+            time.sleep(delay)
+            delay = min(delay * 2, 30)  # Exponential backoff, max 30 seconds
+
 def build_graph(seed_ip, links):
     """links: list of dicts from parser (local_if, remote_sysname, remote_port, remote_mgmt_ip)
     
@@ -95,7 +128,7 @@ def write_topology(seed_ip, nodes, edges, brief):
     })
 
 def enqueue_discovery(device_id, depth, auto_recursive, max_depth):
-    conn = pika.BlockingConnection(pika.ConnectionParameters(host=RABBIT_HOST))
+    conn = connect_to_rabbitmq(max_retries=3, initial_delay=1)
     ch = conn.channel(); ch.queue_declare(queue="discovery", durable=True)
     job = {"type":"discovery","device_id":device_id,"depth":depth,
            "auto_recursive":auto_recursive,"max_depth":max_depth}
@@ -223,16 +256,37 @@ def do_discovery_job(job):
         db.devices.update_one({"_id": oid},{"$set":{"status":"error","error":str(e),"last_seen":time.time()}})
 
 def consume():
-    conn = pika.BlockingConnection(pika.ConnectionParameters(host=RABBIT_HOST))
-    ch = conn.channel(); ch.queue_declare(queue="discovery", durable=True)
-    def cb(ch, method, props, body):
-        job = json.loads(body)
-        if job.get("type")=="discovery":
-            do_discovery_job(job)
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-    ch.basic_consume(queue="discovery", on_message_callback=cb)
-    print(" [*] worker waiting ...")
-    ch.start_consuming()
+    """Main consumer loop with automatic reconnection on connection failure."""
+    while True:
+        try:
+            # Connect with retry logic
+            conn = connect_to_rabbitmq(max_retries=0, initial_delay=2)  # Infinite retries
+            ch = conn.channel()
+            ch.queue_declare(queue="discovery", durable=True)
+            
+            def cb(ch, method, props, body):
+                job = json.loads(body)
+                if job.get("type")=="discovery":
+                    do_discovery_job(job)
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            
+            ch.basic_consume(queue="discovery", on_message_callback=cb)
+            print(" [*] worker waiting ...")
+            ch.start_consuming()
+            
+        except (pika.exceptions.AMQPConnectionError, 
+                pika.exceptions.ConnectionClosedByBroker,
+                pika.exceptions.StreamLostError) as e:
+            print(f"[RabbitMQ] Connection lost: {e}")
+            print("[RabbitMQ] Reconnecting in 5 seconds...")
+            time.sleep(5)
+        except KeyboardInterrupt:
+            print("\n[Worker] Shutting down gracefully...")
+            break
+        except Exception as e:
+            print(f"[Worker] Unexpected error: {e}")
+            print("[Worker] Restarting in 10 seconds...")
+            time.sleep(10)
 
 if __name__=="__main__":
     consume()
