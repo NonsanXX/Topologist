@@ -54,24 +54,66 @@ def get_reachable_devices():
     }))
 
 def get_directly_reachable_devices():
-    """Get list of devices that can be reached directly from this PC (depth=0 and ready).
+    """Get list of devices that can be reached directly from this PC.
     
-    These are devices that we can connect to without going through any jump hosts.
+    Tests actual TCP connectivity to determine reachability instead of relying on depth.
+    Uses cached results to avoid repeated connection attempts.
     
     Returns:
-        list: List of device documents that are directly reachable
+        set: Set of IPs that are directly reachable
     """
-    return list(db.devices.find({
+    # Try to use cached results first (with 5 minute expiry)
+    cache = db.reachability_cache.find_one({"_id": "direct_reachable"})
+    if cache and (time.time() - cache.get("updated_at", 0)) < 300:
+        cached_ips = set(cache.get("reachable_ips", []))
+        print(f"[REACHABILITY] Using cached results: {cached_ips}")
+        return cached_ips
+    
+    # Test connectivity to all ready devices
+    reachable_ips = set()
+    devices = list(db.devices.find({
         "status": {"$in": ["ready", "scanning"]},
-        "host": {"$exists": True, "$ne": ""},
-        "depth": 0  # Only devices at depth 0 can be reached directly
+        "host": {"$exists": True, "$ne": ""}
     }))
+    
+    print(f"[REACHABILITY] Testing {len(devices)} devices for direct connectivity...")
+    
+    import socket
+    for dev in devices:
+        host = dev.get("host")
+        if not host:
+            continue
+            
+        # Quick TCP connection test (don't do full SSH handshake)
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)  # 2 second timeout
+            result = sock.connect_ex((host, 22))
+            sock.close()
+            
+            if result == 0:
+                reachable_ips.add(host)
+                print(f"[REACHABILITY] ✓ {host} is directly reachable")
+            else:
+                print(f"[REACHABILITY] ✗ {host} not reachable (code {result})")
+        except Exception as e:
+            print(f"[REACHABILITY] ✗ {host} test failed: {e}")
+    
+    # Cache the results
+    db.reachability_cache.update_one(
+        {"_id": "direct_reachable"},
+        {"$set": {"reachable_ips": list(reachable_ips), "updated_at": time.time()}},
+        upsert=True
+    )
+    
+    print(f"[REACHABILITY] Found {len(reachable_ips)} directly reachable devices")
+    return reachable_ips
 
 def find_path_to_device(target_ip, reachable_devices):
     """Find a path to reach target_ip through intermediate jump hosts.
     
     Uses breadth-first search through the topology graph to find shortest path.
-    Prioritizes paths from devices that can be directly connected to.
+    Tests actual TCP connectivity to determine which devices can be used as starting points.
     
     Args:
         target_ip: IP address of target device to reach
@@ -96,26 +138,19 @@ def find_path_to_device(target_ip, reachable_devices):
         graph[a].append(b)
         graph[b].append(a)
     
-    # First, try to find devices at depth=0 (directly reachable)
-    directly_reachable = get_directly_reachable_devices()
-    depth0_ips = {d["host"] for d in directly_reachable}
+    # Get devices that are actually directly reachable (tested via TCP)
+    directly_reachable_ips = get_directly_reachable_devices()
     
-    # If no depth=0 devices, try all ready devices (they might be reachable)
-    if not depth0_ips:
-        print("[PATH FINDING] No depth=0 devices, trying all ready devices")
-        depth0_ips = {d["host"] for d in reachable_devices if d["status"] == "ready"}
-    
-    if not depth0_ips:
-        print("[PATH FINDING] No reachable starting points found")
+    if not directly_reachable_ips:
+        print("[PATH FINDING] No directly reachable devices found via connectivity test")
         return None
     
-    print(f"[PATH FINDING] Starting BFS from reachable devices: {depth0_ips}")
+    print(f"[PATH FINDING] Starting BFS from directly reachable devices: {directly_reachable_ips}")
     
     # Try to find shortest path from any directly reachable device
-    # Sort by preference: depth=0 devices first
     best_path = None
     
-    for start_ip in sorted(depth0_ips):
+    for start_ip in sorted(directly_reachable_ips):
         if start_ip == target_ip:
             return [target_ip]  # Already directly reachable
         
