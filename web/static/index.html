@@ -49,6 +49,7 @@
     <thead>
       <tr>
         <th>Host (IP)</th>
+        <th>Interfaces</th>
         <th>Type</th>
         <th>Display</th>
         <th>Identity</th>
@@ -207,10 +208,57 @@
     // ===== Devices Management =====
     function pill(t) { const map = { ready: 's-ready', discovered: 's-discovered', unknown: 's-unknown', needs_creds: 's-needs_creds', scanning: 's-scanning', error: 's-error' }; const cls = map[t] || 's-unknown'; return `<span class="pill ${cls}">${t || 'unknown'}</span>`; }
     function escAttr(v) { return (v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;'); }
+    
+    function formatHostColumn(d) {
+      // Display all IPs equally - no indentation, no color difference
+      let html = `<div style="font-family: monospace; font-size: 15px;">`;
+      
+      if (d.host) {
+        html += `<div style="margin-bottom: 3px;"><strong>${d.host}</strong></div>`;
+      }
+      
+      const alternates = d.alternate_ips || [];
+      alternates.forEach(ip => {
+        html += `<div style="margin-bottom: 3px;">${ip}</div>`;
+      });
+      
+      if (!d.host && alternates.length === 0) {
+        html += `<div style="color: #999;"><i>(empty)</i></div>`;
+      }
+      
+      html += `</div>`;
+      return html;
+    }
+    
+    function formatInterfacesColumn(d) {
+      // Display interfaces corresponding to each IP
+      const interfaceMap = d.interface_map || {};
+      let html = `<div style="font-family: monospace; font-size: 15px;">`;
+      
+      if (d.host) {
+        const iface = interfaceMap[d.host] || '?';
+        html += `<div style="margin-bottom: 3px;"><strong>${iface}</strong></div>`;
+      }
+      
+      const alternates = d.alternate_ips || [];
+      alternates.forEach(ip => {
+        const iface = interfaceMap[ip] || '?';
+        html += `<div style="margin-bottom: 3px;">${iface}</div>`;
+      });
+      
+      if (!d.host && alternates.length === 0) {
+        html += `<div style="color: #999;"><i>-</i></div>`;
+      }
+      
+      html += `</div>`;
+      return html;
+    }
+    
     async function list() {
       const data = await api('/api/devices'); const tb = document.querySelector('#tbl tbody'); tb.innerHTML = ''; data.forEach(d => {
         const tr = document.createElement('tr'); tr.dataset.id = d._id; tr.innerHTML = `
-  <td>${d.host || '<i>(empty)</i>'}</td>
+  <td>${formatHostColumn(d)}</td>
+  <td>${formatInterfacesColumn(d)}</td>
   <td class="editable-cell ${(!d.device_type ? 'empty' : '')}">${deviceTypeSelect(d)}</td>
   <td class="editable-cell">${inlineCell(d._id, 'display_name', d.display_name || '')}</td>
   <td class="editable-cell ${(!d.identity_id ? 'empty' : '')}">${identitySelect(d)}</td>

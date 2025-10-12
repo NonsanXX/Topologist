@@ -352,8 +352,8 @@ def connect_to_rabbitmq(max_retries=10, initial_delay=1):
 def build_graph(seed_ip, links):
     """links: list of dicts from parser (local_if, remote_sysname, remote_port, remote_mgmt_ip)
     
-    Supports both IP-based and name-based node identifiers.
-    - If remote device has mgmt IP: use IP as node ID
+    Uses the primary IP from devices collection to consolidate duplicate devices.
+    - If remote device has mgmt IP: look up primary IP in devices collection
     - If no IP: use 'name:<remote_sysname>' as node ID
     """
     nodes = set([seed_ip])
@@ -364,7 +364,23 @@ def build_graph(seed_ip, links):
         
         # Create node ID: prefer IP, fallback to name-based identifier
         if r_ip:
-            remote_id = r_ip
+            # Check if this IP belongs to a device with a different primary IP
+            # (to handle devices with multiple interfaces)
+            device_by_ip = db.devices.find_one({"host": r_ip})
+            device_by_name = db.devices.find_one({"display_name": r_name, "host": {"$ne": ""}})
+            device_by_alt_ip = db.devices.find_one({"alternate_ips": r_ip})
+            
+            # Determine the canonical/primary IP for this device
+            if device_by_alt_ip:
+                # This IP is an alternate IP, use the primary host instead
+                remote_id = device_by_alt_ip["host"]
+                print(f"  [GRAPH] Using primary IP {remote_id} instead of alternate IP {r_ip} for {r_name}")
+            elif device_by_ip:
+                remote_id = device_by_ip["host"]
+            elif device_by_name:
+                remote_id = device_by_name["host"]
+            else:
+                remote_id = r_ip
         elif r_name:
             remote_id = f"name:{r_name}"
         else:
@@ -384,20 +400,35 @@ def build_graph(seed_ip, links):
 def upsert_graph(seed_ip, links):
     """Upsert nodes and edges to graph_nodes and graph_links collections.
     
-    Supports both IP-based and name-based node identifiers.
+    Uses the primary IP from devices collection to consolidate duplicate devices.
     """
     now = time.time()
     for link in links:
         r_ip = link.get("remote_mgmt_ip")
         r_name = link.get("remote_sysname")
         
-        # Create remote node ID: prefer IP, fallback to name-based identifier
+        # Create remote node ID: check for primary IP to consolidate duplicates
         if r_ip:
-            remote_id = r_ip
+            # Check if this IP belongs to a device with a different primary IP
+            device_by_ip = db.devices.find_one({"host": r_ip})
+            device_by_name = db.devices.find_one({"display_name": r_name, "host": {"$ne": ""}})
+            device_by_alt_ip = db.devices.find_one({"alternate_ips": r_ip})
+            
+            # Determine the canonical/primary IP for this device
+            if device_by_alt_ip:
+                # This IP is an alternate IP, use the primary host instead
+                remote_id = device_by_alt_ip["host"]
+            elif device_by_ip:
+                remote_id = device_by_ip["host"]
+            elif device_by_name:
+                remote_id = device_by_name["host"]
+            else:
+                remote_id = r_ip
         elif r_name:
             remote_id = f"name:{r_name}"
         else:
             # Skip if neither IP nor name available
+            continue
             continue
         
         # Upsert seed node (always IP-based)
@@ -611,9 +642,39 @@ def do_discovery_job(job):
                     new_devices_added = True
                 continue
 
-            # มี IP → ใช้ IP เป็น host
-            existing = db.devices.find_one({"host": r_ip})
-            if not existing:
+            # มี IP → check for duplicate by display_name first (same device, different IP)
+            existing_by_name = db.devices.find_one({"display_name": rname, "host": {"$ne": ""}})
+            existing_by_ip = db.devices.find_one({"host": r_ip})
+            
+            if existing_by_name and not existing_by_ip:
+                # Same device name but different IP - this is the same device with multiple interfaces
+                print(f"  [DEDUP] Found existing device {rname} with IP {existing_by_name['host']}, adding {r_ip} as alternate IP")
+                
+                # Store alternate IPs with their interfaces in the device document
+                alternate_ips = existing_by_name.get("alternate_ips", [])
+                interface_map = existing_by_name.get("interface_map", {})
+                
+                if r_ip not in alternate_ips and r_ip != existing_by_name["host"]:
+                    alternate_ips.append(r_ip)
+                    # Store the interface for this IP (remote_port is the interface on the remote device)
+                    interface_map[r_ip] = link.get("remote_port", "")
+                    
+                    db.devices.update_one(
+                        {"_id": existing_by_name["_id"]},
+                        {"$set": {"alternate_ips": alternate_ips, "interface_map": interface_map}}
+                    )
+                
+                # Update depth if this path is shorter
+                if existing_by_name.get("depth", 999) > depth+1:
+                    db.devices.update_one(
+                        {"_id": existing_by_name["_id"]},
+                        {"$set": {"depth": depth+1, "parent": seed_ip}}
+                    )
+                continue
+            
+            if not existing_by_ip:
+                # Completely new device
+                interface_map = {r_ip: link.get("remote_port", "")} if r_ip else {}
                 new = {
                     "host": r_ip, "display_name": rname,
                     "platform": "cisco_ios",
@@ -623,6 +684,8 @@ def do_discovery_job(job):
                     "status": default_status,
                     "depth": depth+1, "parent": seed_ip,
                     "device_type": r_type if r_type != 'unknown' else None,
+                    "alternate_ips": [],
+                    "interface_map": interface_map,
                     "created_at": time.time(), "last_seen": None
                 }
                 new_id = db.devices.insert_one(new).inserted_id
@@ -630,17 +693,22 @@ def do_discovery_job(job):
                 if auto_recursive and (depth+1) <= max_depth:
                     enqueue_discovery(str(new_id), depth+1, auto_recursive, max_depth)
             else:
-                # อัปเดตชื่อ / depth / parent ถ้าจำเป็น
+                # Device with this IP already exists - just update metadata and interface
                 upd = {}
-                if "display_name" not in existing or not existing["display_name"]:
+                if "display_name" not in existing_by_ip or not existing_by_ip["display_name"]:
                     upd["display_name"] = rname
-                if existing.get("depth", 999) > depth+1:
+                if existing_by_ip.get("depth", 999) > depth+1:
                     upd["depth"] = depth+1; upd["parent"] = seed_ip
                 # ถ้าไม่มี device_type เดิม และเราตรวจพบ
-                if (not existing.get("device_type")) and r_type and r_type != 'unknown':
+                if (not existing_by_ip.get("device_type")) and r_type and r_type != 'unknown':
                     upd["device_type"] = r_type
+                # Update interface map for primary IP
+                interface_map = existing_by_ip.get("interface_map", {})
+                if r_ip and link.get("remote_port"):
+                    interface_map[r_ip] = link.get("remote_port")
+                    upd["interface_map"] = interface_map
                 if upd:
-                    db.devices.update_one({"_id": existing["_id"]}, {"$set": upd})
+                    db.devices.update_one({"_id": existing_by_ip["_id"]}, {"$set": upd})
         
         # If we added new devices, trigger discover_all to cascade discovery
         if new_devices_added:
