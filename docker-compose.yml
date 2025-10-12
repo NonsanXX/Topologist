@@ -2,46 +2,64 @@ services:
   mongo:
     image: mongo:6
     container_name: topo-mongo
-    ports: ["27017:27017"]
+    ports: [ "27017:27017" ]
     volumes:
       - mongo-data:/data/db
+    networks:
+      - app-net
+    env_file: .env
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: topo-rabbit
     ports:
-      - "15672:15672"  # UI
-      - "5672:5672"    # AMQP
+      - "15672:15672" # UI
+      - "5672:5672" # AMQP
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - app-net
+    env_file: .env
 
   scheduler:
     build: ./scheduler
     container_name: topo-scheduler
     env_file: .env
     environment:
-      - MONGO_URI=${MONGO_URI}
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
       - DB_NAME=${DB_NAME}
-    depends_on: [mongo, rabbitmq]
-    ports: ["5001:5001"]
+    networks:
+      - app-net
+    depends_on: [ mongo, rabbitmq ]
+    ports: [ "5001:5001" ]
 
   worker:
     build: ./worker
     container_name: topo-worker
     env_file: .env
     environment:
-      - MONGO_URI=${MONGO_URI}
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
       - DB_NAME=${DB_NAME}
-    depends_on: [rabbitmq, mongo]
+    networks:
+      - app-net
+    depends_on: [ rabbitmq, mongo ]
 
   web:
     build: ./web
     container_name: topo-web
     env_file: .env
     environment:
-      - MONGO_URI=${MONGO_URI}
+      - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
       - DB_NAME=${DB_NAME}
       - SCHEDULER_URL=http://scheduler:5001
-    ports: ["8000:8000"]
-    depends_on: [mongo, scheduler]
+    networks:
+      - app-net
+    ports: [ "8000:8000" ]
+    depends_on: [ mongo, scheduler ]
 
 volumes:
   mongo-data:
+  rabbitmq-data:
+
+networks:
+  app-net:
