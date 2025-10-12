@@ -3,7 +3,9 @@ import time
 import json
 import pika
 
-RABBIT_HOST = os.getenv("RABBIT_HOST", "rabbitmq")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
+RABBITMQ_USER = os.getenv("RABBITMQ_DEFAULT_USER", "guest")
+RABBITMQ_PASS = os.getenv("RABBITMQ_DEFAULT_PASS", "guest")
 
 
 def connect_to_rabbitmq(max_retries=10, initial_delay=1):
@@ -23,8 +25,10 @@ def connect_to_rabbitmq(max_retries=10, initial_delay=1):
         try:
             attempt += 1
             print(f"[RabbitMQ] Connection attempt {attempt}...")
+            credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
             conn = pika.BlockingConnection(pika.ConnectionParameters(
-                host=RABBIT_HOST,
+                host=RABBITMQ_HOST,
+                credentials=credentials,
                 heartbeat=600,
                 blocked_connection_timeout=300
             ))
