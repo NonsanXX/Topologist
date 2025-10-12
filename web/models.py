@@ -1,26 +1,12 @@
-import os, time, requests
-from fastapi import FastAPI, Body, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from pymongo import MongoClient
+import time
+from fastapi import HTTPException, Body
 from bson.objectid import ObjectId
 
-MONGO_URI = os.getenv("MONGO_URI","mongodb://mongo:27017")
-DB_NAME   = os.getenv("DB_NAME","topologist")
-SCHEDULER_URL = os.getenv("SCHEDULER_URL","http://scheduler:5001")
+from database import db
 
-db = MongoClient(MONGO_URI)[DB_NAME]
 
-app = FastAPI(title="Topologist Web")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/")
-def index():
-    return FileResponse("static/index.html")
-
-# ---------- Identities (Credentials) ----------
-@app.get("/api/identities")
 def list_identities():
+    """Get list of all identities."""
     items = []
     for d in db.identities.find().sort("created_at", -1):
         d["_id"] = str(d["_id"])
@@ -29,8 +15,9 @@ def list_identities():
         items.append(d)
     return items
 
-@app.get("/api/identities/{identity_id}")
+
 def get_identity(identity_id: str):
+    """Get a specific identity by ID."""
     try:
         oid = ObjectId(identity_id)
     except:
@@ -41,8 +28,9 @@ def get_identity(identity_id: str):
     doc["_id"] = str(doc["_id"])
     return doc
 
-@app.post("/api/identities")
-def add_identity(payload: dict = Body(...)):
+
+def add_identity(payload: dict):
+    """Add a new identity."""
     name = (payload.get("name") or "").strip()
     username = (payload.get("username") or "").strip()
     password = (payload.get("password") or "").strip()
@@ -61,8 +49,9 @@ def add_identity(payload: dict = Body(...)):
     oid = db.identities.insert_one(doc).inserted_id
     return {"_id": str(oid), "message": "identity created"}
 
-@app.post("/api/identities/{identity_id}/set_default")
+
 def set_default_identity(identity_id: str):
+    """Set an identity as default."""
     try:
         oid = ObjectId(identity_id)
     except:
@@ -81,14 +70,16 @@ def set_default_identity(identity_id: str):
     
     return {"ok": True, "message": f"'{identity['name']}' is now the default identity"}
 
-@app.post("/api/identities/unset_default")
+
 def unset_default_identity():
+    """Unset default identity."""
     # Unset all defaults
     db.identities.update_many({}, {"$set": {"is_default": False}})
     return {"ok": True, "message": "Default identity unset"}
 
-@app.patch("/api/identities/{identity_id}")
-def update_identity(identity_id: str, payload: dict = Body(...)):
+
+def update_identity(identity_id: str, payload: dict):
+    """Update an identity."""
     try:
         oid = ObjectId(identity_id)
     except:
@@ -102,8 +93,9 @@ def update_identity(identity_id: str, payload: dict = Body(...)):
     db.identities.update_one({"_id": oid}, {"$set": data})
     return {"ok": True, "set": data}
 
-@app.delete("/api/identities/{identity_id}")
+
 def delete_identity(identity_id: str):
+    """Delete an identity."""
     try:
         oid = ObjectId(identity_id)
     except:
@@ -117,12 +109,12 @@ def delete_identity(identity_id: str):
     db.identities.delete_one({"_id": oid})
     return {"deleted": True}
 
-# ---------- Inventory ----------
-@app.get("/api/devices")
+
 def list_devices():
-    items=[]
-    for d in db.devices.find().sort("created_at",-1):
-        d["_id"]=str(d["_id"])
+    """Get list of all devices."""
+    items = []
+    for d in db.devices.find().sort("created_at", -1):
+        d["_id"] = str(d["_id"])
         # Include identity name if identity_id is set
         if d.get("identity_id"):
             identity = db.identities.find_one({"_id": ObjectId(d["identity_id"])})
@@ -130,14 +122,16 @@ def list_devices():
         items.append(d)
     return items
 
-@app.post("/api/devices")
-def add_device(payload: dict = Body(...)):
-    host=(payload.get("host") or "").strip()
-    platform=(payload.get("platform") or "cisco_ios").strip()
-    identity_id=(payload.get("identity_id") or "").strip() or None
-    device_type=(payload.get("device_type") or "").strip() or None
+
+def add_device(payload: dict):
+    """Add a new device."""
+    host = (payload.get("host") or "").strip()
+    platform = (payload.get("platform") or "cisco_ios").strip()
+    identity_id = (payload.get("identity_id") or "").strip() or None
+    device_type = (payload.get("device_type") or "").strip() or None
     
-    if not host: raise HTTPException(400,"host required")
+    if not host:
+        raise HTTPException(400, "host required")
     
     # Determine status based on identity_id or legacy username/password
     username = None
@@ -156,43 +150,61 @@ def add_device(payload: dict = Body(...)):
             raise HTTPException(400, "invalid identity_id")
     else:
         # Legacy: direct username/password (for backward compatibility)
-        username=(payload.get("username") or "").strip() or None
-        password=(payload.get("password") or "").strip() or None
-        status="ready" if (username and password) else "unknown"
+        username = (payload.get("username") or "").strip() or None
+        password = (payload.get("password") or "").strip() or None
+        status = "ready" if (username and password) else "unknown"
     
-    doc={"host":host,"platform":platform,
-         "identity_id":identity_id,"username":username,"password":password,
-         "status":status,"depth":int(payload.get("depth",0)),"parent":payload.get("parent"),
-         "device_type":device_type,
-         "created_at":time.time(),"last_seen":None}
-    old=db.devices.find_one({"host":host})
+    doc = {
+        "host": host,
+        "platform": platform,
+        "identity_id": identity_id,
+        "username": username,
+        "password": password,
+        "status": status,
+        "depth": int(payload.get("depth", 0)),
+        "parent": payload.get("parent"),
+        "device_type": device_type,
+        "created_at": time.time(),
+        "last_seen": None
+    }
+    old = db.devices.find_one({"host": host})
     if old:
-        db.devices.update_one({"_id":old["_id"]},{"$set":doc})
-        oid=old["_id"]
+        db.devices.update_one({"_id": old["_id"]}, {"$set": doc})
+        oid = old["_id"]
     else:
-        oid=db.devices.insert_one(doc).inserted_id
-    return {"_id":str(oid),"message":"saved"}
+        oid = db.devices.insert_one(doc).inserted_id
+    return {"_id": str(oid), "message": "saved"}
 
-@app.delete("/api/devices/{device_id}")
-def delete_device(device_id:str):
-    try: oid=ObjectId(device_id)
-    except: raise HTTPException(400,"invalid id")
-    db.devices.delete_one({"_id":oid})
-    return {"deleted":True}
 
-@app.post("/api/devices/{device_id}/creds")
-def save_creds(device_id:str, payload:dict=Body(...)):
-    try: oid=ObjectId(device_id)
-    except: raise HTTPException(400,"invalid id")
-    u=(payload.get("username") or "").strip()
-    p=(payload.get("password") or "").strip()
-    if not u or not p: raise HTTPException(400,"username/password required")
-    db.devices.update_one({"_id":oid},{"$set":{"username":u,"password":p,"status":"ready","last_seen":time.time()}})
-    return {"ok":True}
+def delete_device(device_id: str):
+    """Delete a device."""
+    try:
+        oid = ObjectId(device_id)
+    except:
+        raise HTTPException(400, "invalid id")
+    db.devices.delete_one({"_id": oid})
+    return {"deleted": True}
 
-@app.patch("/api/devices/{device_id}")
-def update_device(device_id: str, payload: dict = Body(...)):
-    """แก้ไขค่า inline เช่น identity_id, display_name, device_type"""
+
+def save_device_creds(device_id: str, payload: dict):
+    """Save credentials for a device."""
+    try:
+        oid = ObjectId(device_id)
+    except:
+        raise HTTPException(400, "invalid id")
+    u = (payload.get("username") or "").strip()
+    p = (payload.get("password") or "").strip()
+    if not u or not p:
+        raise HTTPException(400, "username/password required")
+    db.devices.update_one(
+        {"_id": oid},
+        {"$set": {"username": u, "password": p, "status": "ready", "last_seen": time.time()}}
+    )
+    return {"ok": True}
+
+
+def update_device(device_id: str, payload: dict):
+    """Update device fields."""
     try:
         oid = ObjectId(device_id)
     except:
@@ -227,30 +239,14 @@ def update_device(device_id: str, payload: dict = Body(...)):
     return {"ok": True, "set": data}
 
 
-# ---------- Topology ----------
-@app.get("/api/topology/latest")
 def latest_topology():
-    doc = db.topology.find_one(sort=[("created_at",-1)], projection={"_id":0})
-    return doc or {"nodes":[],"links":[],"meta":{"generated_at":None}}
+    """Get the latest topology snapshot."""
+    doc = db.topology.find_one(sort=[("created_at", -1)], projection={"_id": 0})
+    return doc or {"nodes": [], "links": [], "meta": {"generated_at": None}}
 
-# ---------- Orchestration (call scheduler) ----------
-@app.post("/api/discover")
-def api_discover(payload:dict=Body(...)):
-    # payload: {"device_id": "..."} or {"host": "..."} + optional {"auto_recursive": false, "max_depth":2}
-    r=requests.post(f"{SCHEDULER_URL}/discover", json=payload, timeout=30)
-    return JSONResponse(r.json(), status_code=r.status_code)
 
-# ----- Global Graph -----
-@app.get("/api/topology/graph")
 def topology_graph():
-    """Nodes keyed by IP or name-based identifier (graph_nodes._id).
-    
-    Node IDs can be:
-    - IP address (e.g., "10.0.15.46")
-    - Name-based (e.g., "name:Switch")
-    
-    Attach display label and device_type from devices collection.
-    """
+    """Get global topology graph with nodes and links."""
     nodes = []
     for n in db.graph_nodes.find({}, {"_id": 1}):
         node_id = n["_id"]
@@ -290,15 +286,9 @@ def topology_graph():
         })
     return {"nodes": nodes, "links": edges}
 
-# ----- Discover All (enqueue ทุก device ที่ ready) -----
-@app.post("/api/discover_all")
-def discover_all():
-    r = requests.post(f"{SCHEDULER_URL}/discover_all", timeout=60)
-    return JSONResponse(r.json(), status_code=r.status_code)
 
-# ----- Maintenance: Clear topology (graph + historical topology docs) -----
-@app.post("/api/topology/clear")
 def clear_topology():
+    """Clear all topology data."""
     gn = db.graph_nodes.delete_many({}).deleted_count
     gl = db.graph_links.delete_many({}).deleted_count
     tp = db.topology.delete_many({}).deleted_count
