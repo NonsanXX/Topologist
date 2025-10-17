@@ -84,7 +84,7 @@
         <div class="header-actions">
           <label class="checkbox-label">
             <input type="checkbox" id="autoRefreshTablesChk" onchange="toggleTableAutoRefresh()">
-            <span>Auto Refresh (5s)</span>
+            <span>Auto Refresh (2s)</span>
           </label>
           <button class="btn btn-secondary btn-sm" onclick="list()">Refresh</button>
         </div>
@@ -117,7 +117,7 @@
         <div class="header-actions">
           <label class="checkbox-label">
             <input type="checkbox" id="autoRefreshTopoChk" onchange="toggleTopoAutoRefresh()">
-            <span>Auto Refresh (5s)</span>
+            <span>Auto Refresh (2s)</span>
           </label>
           <button class="btn btn-success" onclick="discoverAllAndRefresh()">Discover All</button>
           <button class="btn btn-secondary" onclick="refreshTopo()">Refresh</button>
@@ -176,7 +176,16 @@
     <p>Topologist © 2025 | Network Topology Discovery Platform</p>
   </footer>
   <script>
-    async function api(path, opts) { const r = await fetch(path, opts); return r.json(); }
+    // Simple fetch wrapper with no-store cache and basic error surfacing
+    async function api(path, opts = {}) {
+      const r = await fetch(path, { cache: 'no-store', ...opts });
+      if (!r.ok) {
+        // Try to extract text for better error messages
+        const msg = await r.text().catch(() => 'HTTP ' + r.status);
+        throw new Error(msg || ('HTTP ' + r.status));
+      }
+      return r.json();
+    }
     // Interval handles for separate auto refresh controls
     let topoAutoTimer = null;
     let tableAutoTimer = null;
@@ -375,7 +384,7 @@
       hostInput.value = '';
       await list(); 
     }
-    async function delDev(id) { await api('/api/devices/' + id, { method: 'DELETE' }); await list(); }
+  async function delDev(id) { await api('/api/devices/' + id, { method: 'DELETE' }); await list(); }
     
     function attachInlineHandlers() {
       document.querySelectorAll('.inline-wrap').forEach(w => {
@@ -419,79 +428,91 @@
         };
       });
     }
-    async function commitInline(id, field, val) { try { await api(`/api/devices/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: val }) }); } catch (e) { console.error('inline update failed', e); } await list(); }
-    async function delDev(id) { await api('/api/devices/' + id, { method: 'DELETE' }); await list(); }
+    // (deduped) commitInline and delDev are defined above
     async function discoverAll() { try { await api('/api/discover_all', { method: 'POST' }); } catch (e) { alert('Failed to queue discover all: ' + e); } }
     async function discoverAllAndRefresh() { await discoverAll(); await list(); await refreshTopo(); }
     async function clearTopology() { if (!confirm('Clear topology graph & history?')) return; try { await api('/api/topology/clear', { method: 'POST' }); await refreshTopo(); } catch (e) { alert('Clear failed: ' + e); } }
     function toggleTableAutoRefresh() {
       const chk = document.getElementById('autoRefreshTablesChk');
+      // Always clear any existing timer first
+      if (tableAutoTimer) { clearInterval(tableAutoTimer); tableAutoTimer = null; }
       if (chk.checked) {
-        // Refresh tables every 5 seconds when enabled
-        tableAutoTimer = setInterval(() => { 
+        const tick = async () => {
           // Only refresh tables if nothing is being edited
           if (!document.querySelector('.inline-wrap.editing, .dropdown-open')) {
-            listIdentities();
-            list();
+            try { await listIdentities(); await list(); } catch (e) { console.warn('Table auto-refresh failed:', e.message); }
           }
-        }, 5000);
-      } else {
-        if (tableAutoTimer) clearInterval(tableAutoTimer);
-        tableAutoTimer = null;
+        };
+        // Immediate run, then interval
+        tick();
+        tableAutoTimer = setInterval(tick, 2000);
       }
     }
     
     function toggleTopoAutoRefresh() {
       const chk = document.getElementById('autoRefreshTopoChk');
+      // Always clear any existing timer first
+      if (topoAutoTimer) { clearInterval(topoAutoTimer); topoAutoTimer = null; }
       if (chk.checked) {
-        // Refresh topology every 5 seconds when enabled
-        topoAutoTimer = setInterval(() => { 
-          refreshTopo();
-        }, 5000);
-      } else {
-        if (topoAutoTimer) clearInterval(topoAutoTimer);
-        topoAutoTimer = null;
+        const tick = async () => {
+          try { await refreshTopo(); } catch (e) { console.warn('Topo auto-refresh failed:', e.message); }
+        };
+        // Immediate run, then interval
+        tick();
+        topoAutoTimer = setInterval(tick, 2000);
       }
     }
-    const cy = cytoscape({
-      container: document.getElementById('graph'),
-      layout: { name: 'cose' },
-      style: [
-        { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'transparent', 'background-opacity': 0, 'background-clip': 'none', 'border-width': 0, 'color': '#FFFFFF', 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 8, 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 90, 'width': 64, 'height': 64, 'text-background-color': '#2F3136', 'text-background-opacity': 0.9, 'text-background-padding': '4px', 'text-background-shape': 'roundrectangle' } },
-        // Icon images by device_type
-        { selector: 'node[device_type = "router"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/router.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
-        { selector: 'node[device_type = "switch"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/switch.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
-        { selector: 'node[device_type = "layer3_switch"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/layer3_switch.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
-        { selector: 'node[device_type = "firewall"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/firewall.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
-        { selector: 'node[device_type = "ap"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/ap.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
-        { selector: 'node[device_type = "server"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/server.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
-        { selector: 'node[device_type = "end"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/end.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
-        {
-          selector: 'edge',
-          style: {
-            'line-color': '#B9BBBE',
-            'width': 3,
-            // Per-endpoint labels
-            'source-label': 'data(ifSrc)',
-            'target-label': 'data(ifDst)',
-            'font-size': 12,
-            'font-weight': 600,
-            'color': '#FFFFFF',
-            'source-text-offset': 15,
-            'target-text-offset': 15,
-            'text-background-color': '#2F3136',
-            'text-background-opacity': 0.95,
-            'text-background-padding': '3px',
-            'text-background-shape': 'roundrectangle',
-            'text-border-opacity': 0,
-            'curve-style': 'bezier'
+
+    // Guard Cytoscape initialization so the app still works even if the CDN is unreachable
+    let cy = null;
+    function initCy() {
+      if (cy || !window.cytoscape) return;
+      cy = window.cytoscape({
+        container: document.getElementById('graph'),
+        layout: { name: 'cose' },
+        style: [
+          { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'transparent', 'background-opacity': 0, 'background-clip': 'none', 'border-width': 0, 'color': '#FFFFFF', 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 8, 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 90, 'width': 64, 'height': 64, 'text-background-color': '#2F3136', 'text-background-opacity': 0.9, 'text-background-padding': '4px', 'text-background-shape': 'roundrectangle' } },
+          // Icon images by device_type
+          { selector: 'node[device_type = "router"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/router.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+          { selector: 'node[device_type = "switch"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/switch.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+          { selector: 'node[device_type = "layer3_switch"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/layer3_switch.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+          { selector: 'node[device_type = "firewall"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/firewall.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+          { selector: 'node[device_type = "ap"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/ap.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+          { selector: 'node[device_type = "server"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/server.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+          { selector: 'node[device_type = "end"]', style: { 'background-color': 'transparent', 'background-opacity': 0, 'background-image': '/static/icons/end.svg', 'background-fit': 'contain', 'width': 70, 'height': 70 } },
+          {
+            selector: 'edge',
+            style: {
+              'line-color': '#B9BBBE',
+              'width': 3,
+              // Per-endpoint labels
+              'source-label': 'data(ifSrc)',
+              'target-label': 'data(ifDst)',
+              'font-size': 12,
+              'font-weight': 600,
+              'color': '#FFFFFF',
+              'source-text-offset': 15,
+              'target-text-offset': 15,
+              'text-background-color': '#2F3136',
+              'text-background-opacity': 0.95,
+              'text-background-padding': '3px',
+              'text-background-shape': 'roundrectangle',
+              'text-border-opacity': 0,
+              'curve-style': 'bezier'
+            }
           }
-        }
-      ]
-    });
+        ]
+      });
+    }
     async function refreshTopo() {
       const data = await api('/api/topology/graph');
       document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+      // Initialize cytoscape if available and not yet created
+      initCy();
+      if (!cy) {
+        // Cytoscape not loaded (likely offline CDN). We still update the raw data and exit gracefully.
+        return;
+      }
       const nodes = (data.nodes || []).map(n => ({ data: { id: n.id, label: (n.label || n.id), device_type: n.device_type || '' } }));
       const edges = (data.links || []).map(e => ({
         data: {
@@ -510,6 +531,9 @@
     listIdentities();
     list();
     refreshTopo();
+    // If user left auto-refresh toggles on (e.g., after a reload), re-enable timers
+    if (document.getElementById('autoRefreshTablesChk')?.checked) toggleTableAutoRefresh();
+    if (document.getElementById('autoRefreshTopoChk')?.checked) toggleTopoAutoRefresh();
 
   </script>
 </body>
