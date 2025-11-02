@@ -1,7 +1,6 @@
 services:
   mongo:
     image: mongo:6
-    container_name: topo-mongo
     ports: [ "27017:27017" ]
     volumes:
       - mongo-data:/data/db
@@ -11,7 +10,6 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: topo-rabbit
     ports:
       - "15672:15672" # UI
       - "5672:5672" # AMQP
@@ -23,7 +21,6 @@ services:
 
   scheduler:
     build: ./scheduler
-    container_name: topo-scheduler
     env_file: .env
     environment:
       - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
@@ -35,7 +32,6 @@ services:
 
   worker:
     build: ./worker
-    container_name: topo-worker
     env_file: .env
     environment:
       - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
@@ -46,12 +42,11 @@ services:
 
   web:
     build: ./web
-    container_name: topo-web
     env_file: .env
     environment:
       - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
       - DB_NAME=${DB_NAME}
-      - SCHEDULER_URLhttp://scheduler:5001=http://scheduler:5001
+      - SCHEDULER_URL=http://scheduler:5001
     networks:
       - app-net
     ports: [ "8000:8000" ]

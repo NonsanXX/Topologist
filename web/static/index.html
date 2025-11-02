@@ -54,6 +54,54 @@
       word-break: break-all; font-family: monospace;
       font-size: 14px;
     }
+    .btn.btn-info {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .btn.btn-info:hover {
+      background: #1d4ed8;
+    }
+    .command-status {
+      display: none;
+      margin-top: 16px;
+    }
+    .command-status .status-text {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .command-status[data-status="queued"] .status-text,
+    .command-status[data-status="running"] .status-text {
+      color: var(--text-secondary);
+    }
+    .command-status[data-status="succeeded"] .status-text {
+      color: #4caf50;
+    }
+    .command-status[data-status="failed"] .status-text,
+    .command-status[data-status="error"] .status-text {
+      color: #ff6b6b;
+    }
+    .status-bar {
+      position: relative;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .status-bar-fill {
+      position: absolute;
+      top: 0;
+      left: -40%;
+      width: 40%;
+      height: 100%;
+      background: #4caf50;
+      animation: status-progress 1.1s linear infinite;
+    }
+    @keyframes status-progress {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(300%); }
+    }
     @keyframes modal-fade-in {
       from { opacity: 0; transform: scale(0.95); }
       to { opacity: 1; transform: scale(1); }
@@ -390,7 +438,8 @@
   <td>${d.parent ?? ''}</td>
   <td class="action-cell">
     <button class="btn btn-sm btn-danger" onclick="delDev('${d._id}')">Delete</button>
-    <button class="btn btn-sm btn-primary" style="margin-right: 4px;" onclick="openCommandModal('${d._id}', '${d.host}')">Config</button>
+    <a class="btn btn-sm btn-info" style="margin-right: 4px;" href="/info?device_id=${d._id}">Info</a>
+    <button class="btn btn-sm btn-primary" style="margin-right: 4px;" onclick="openCommandModal('${d._id}', '${d.host}')">CLI</button>
     </td>`; tb.appendChild(tr);
   
       }); attachInlineHandlers();
@@ -578,9 +627,39 @@
       cy.layout({ name: 'cose' }).run();
     }
     let currentManagingDeviceId = null; 
+    let commandPollTimer = null;
+
+  function updateStatusDisplay(elementId, state, message) {
+    const statusEl = document.getElementById(elementId);
+    if (!statusEl) return;
+    statusEl.setAttribute('data-status', state || '');
+    statusEl.innerHTML = '';
+    if (!message) {
+      statusEl.style.display = 'none';
+      return;
+    }
+    statusEl.style.display = 'block';
+    const textDiv = document.createElement('div');
+    textDiv.className = 'status-text';
+    textDiv.textContent = message;
+    statusEl.appendChild(textDiv);
+    if (state === 'running') {
+      const bar = document.createElement('div');
+      bar.className = 'status-bar';
+      const fill = document.createElement('div');
+      fill.className = 'status-bar-fill';
+      statusEl.appendChild(bar);
+      bar.appendChild(fill);
+    }
+  }
   
   function openCommandModal(deviceId, hostIp) {
     currentManagingDeviceId = deviceId;
+    if (commandPollTimer) {
+      clearInterval(commandPollTimer);
+      commandPollTimer = null;
+    }
+    updateStatusDisplay('commandStatus', '', '');
     document.getElementById('modalTitle').textContent = `Manage: ${hostIp || deviceId}`;
     document.getElementById('commandInput').value = ''; // เคลียร์ช่อง input
     document.getElementById('commandOutput').textContent = ''; // เคลียร์ช่อง output
@@ -589,7 +668,55 @@
 
   function closeCommandModal() {
     currentManagingDeviceId = null;
+    if (commandPollTimer) {
+      clearInterval(commandPollTimer);
+      commandPollTimer = null;
+    }
+    updateStatusDisplay('commandStatus', '', '');
     document.getElementById('commandModalBackdrop').style.display = 'none';
+  }
+
+  function startCommandPolling(jobId, refreshInventory) {
+    const outputBox = document.getElementById('commandOutput');
+    if (commandPollTimer) {
+      clearInterval(commandPollTimer);
+    }
+    const poll = async () => {
+      try {
+        const status = await api(`/api/device_commands/${jobId}`);
+        if (!status) return;
+        if (status.status === 'queued' || status.status === 'running') {
+          if (status.status === 'running') {
+            updateStatusDisplay('commandStatus', 'running', 'Running CLI command...');
+            outputBox.textContent = status.output || 'Executing...';
+          } else {
+            updateStatusDisplay('commandStatus', 'queued', 'Waiting for worker to start...');
+            outputBox.textContent = status.output || 'Awaiting worker...';
+          }
+          return;
+        }
+        if (status.status === 'succeeded') {
+          updateStatusDisplay('commandStatus', 'succeeded', 'Command completed successfully.');
+          outputBox.textContent = status.output || '(no output)';
+          if (refreshInventory) {
+            await list();
+          }
+        } else if (status.status === 'failed') {
+          updateStatusDisplay('commandStatus', 'failed', 'Command failed.');
+          outputBox.textContent = status.error || 'Command failed';
+        } else {
+          updateStatusDisplay('commandStatus', status.status || '', `Status: ${status.status}`);
+          outputBox.textContent = status.output || `Status: ${status.status}`;
+        }
+        clearInterval(commandPollTimer);
+        commandPollTimer = null;
+      } catch (e) {
+        outputBox.textContent = 'Error fetching status: ' + e.message;
+        updateStatusDisplay('commandStatus', 'error', 'Error fetching command status.');
+      }
+    };
+    poll();
+    commandPollTimer = setInterval(poll, 1200);
   }
 
   async function runCommand() {
@@ -603,7 +730,8 @@
       return;
     }
 
-    outputBox.textContent = 'Running...';
+    outputBox.textContent = 'Queueing CLI job...';
+    updateStatusDisplay('commandStatus', 'queued', 'Submitting CLI command...');
 
     try {
       const result = await api(`/api/devices/${currentManagingDeviceId}/run_command`, {
@@ -611,34 +739,43 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: command })
       });
-      
-      // แสดงผลลัพธ์
-      outputBox.textContent = result.output;
-
-      // ถ้ามีการเปลี่ยน hostname (เช่น "hostname R1-NEW")
-      // เราควรอัปเดตตาราง Inventory ด้วย
-      if (command.includes('hostname')) {
-        await list(); // รีเฟรชตาราง
+      if (result?.job_id) {
+        const refreshInventory = Boolean(result.refresh_inventory);
+        updateStatusDisplay('commandStatus', 'queued', 'Waiting for worker to start...');
+        startCommandPolling(result.job_id, refreshInventory);
+      } else if (result?.output) {
+        updateStatusDisplay('commandStatus', 'succeeded', 'Command completed successfully.');
+        outputBox.textContent = result.output;
+      } else {
+        outputBox.textContent = 'Unexpected response from server.';
+        updateStatusDisplay('commandStatus', 'error', 'Unexpected response from server.');
       }
-
     } catch (e) {
       outputBox.textContent = 'Error: ' + e.message;
+      updateStatusDisplay('commandStatus', 'error', 'Failed to submit CLI command.');
     }
   }
 
-  // ปิด Modal ถ้าคลิกพื้นหลังสีดำ
-  document.getElementById('commandModalBackdrop').onclick = (e) => {
-    if (e.target.id === 'commandModalBackdrop') {
-      closeCommandModal();
+  document.addEventListener('DOMContentLoaded', () => {
+    const backdrop = document.getElementById('commandModalBackdrop');
+    if (backdrop) {
+      backdrop.addEventListener('click', (e) => {
+        if (e.target.id === 'commandModalBackdrop') {
+          closeCommandModal();
+        }
+      });
     }
-  };
-    // Initial load
     listIdentities();
     list();
     refreshTopo();
-    // If user left auto-refresh toggles on (e.g., after a reload), re-enable timers
-    if (document.getElementById('autoRefreshTablesChk')?.checked) toggleTableAutoRefresh();
-    if (document.getElementById('autoRefreshTopoChk')?.checked) toggleTopoAutoRefresh();
+    // Re-enable timers if the toggles were left on before reload
+    if (document.getElementById('autoRefreshTablesChk')?.checked) {
+      toggleTableAutoRefresh();
+    }
+    if (document.getElementById('autoRefreshTopoChk')?.checked) {
+      toggleTopoAutoRefresh();
+    }
+  });
 
   </script>
   <div id="commandModalBackdrop" class="modal-backdrop" style="display: none;">
@@ -655,6 +792,7 @@
         <textarea id="commandInput" class="input" rows="5"></textarea>
       </div>
       <button class="btn btn-success" onclick="runCommand()">Run Command</button>
+      <div id="commandStatus" class="command-status"></div>
       
       <hr style="margin: 20px 0;">
       

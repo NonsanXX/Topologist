@@ -1,0 +1,422 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Topologist - Device Interface Info</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@100;200;300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .info-page {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .info-card {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-md);
+      padding: 1.5rem;
+    }
+    .info-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .info-header h2 {
+      margin: 0;
+      font-size: 1.35rem;
+      color: var(--primary-color);
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+    .meta-item {
+      background: var(--surface-elevated);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border-color);
+    }
+    .meta-item label {
+      display: block;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .meta-item span {
+      font-weight: 600;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+    .interface-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .interface-table th,
+    .interface-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.9rem;
+      vertical-align: middle;
+    }
+    .interface-table th {
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+    }
+    .status-group {
+      display: inline-flex;
+      gap: 0.4rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+    .badge.connected {
+      background: rgba(59, 165, 93, 0.18);
+      color: #34D399;
+    }
+    .badge.disabled {
+      background: rgba(237, 66, 69, 0.18);
+      color: #F87171;
+    }
+    .badge.available {
+      background: rgba(37, 99, 235, 0.18);
+      color: #60A5FA;
+    }
+    .status-msg.inline {
+      margin-top: 0.25rem;
+      font-size: 0.85rem;
+    }
+    .empty-state {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      padding: 1rem 0;
+    }
+    .output-block {
+      background: #111827;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      padding: 1rem;
+      font-family: "Source Code Pro", "Consolas", monospace;
+      font-size: 0.85rem;
+      color: #F9FAFB;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      max-height: 320px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-top-color: var(--primary-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="app-header">
+    <div class="header-content">
+      <h1>Device Interface Information</h1>
+      <p class="subtitle">Live output from <code>show ip interface brief</code> with interface controls.</p>
+      <div class="header-nav">
+        <a class="btn btn-secondary btn-sm" href="/">&larr; Back to Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="info-page">
+      <section class="info-card">
+        <div class="info-header">
+          <div>
+            <h2 id="deviceTitle">Loading device...</h2>
+            <div class="status-msg inline" id="deviceStatus"></div>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary btn-sm" id="refreshBtn" disabled>Refresh Info</button>
+          </div>
+        </div>
+        <div class="meta-grid" id="deviceMeta" style="display:none;"></div>
+      </section>
+
+
+      <section class="info-card">
+        <div class="info-header">
+          <h2>Interface Summary</h2>
+        </div>
+        <div id="commandStatus" class="status-msg inline"></div>
+        <div id="interfacesContainer">
+          <p class="empty-state">No interface summary available yet.</p>
+        </div>
+      </section>
+
+      <section class="info-card">
+        <div class="info-header">
+          <h2>Routing Table</h2>
+        </div>
+        <div id="routeContainer" class="output-block">No routing information yet.</div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const AUTO_REFRESH_MS = 5000;
+
+    async function api(path, opts = {}) {
+      const resp = await fetch(path, { cache: 'no-store', ...opts });
+      if (!resp.ok) {
+        const msg = await resp.text().catch(() => resp.statusText || `HTTP ${resp.status}`);
+        throw new Error(msg || `HTTP ${resp.status}`);
+      }
+      return resp.json();
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const deviceId = params.get('device_id');
+    const deviceTitleEl = document.getElementById('deviceTitle');
+    const deviceStatusEl = document.getElementById('deviceStatus');
+    const deviceMetaEl = document.getElementById('deviceMeta');
+    const commandStatusEl = document.getElementById('commandStatus');
+    const interfacesContainerEl = document.getElementById('interfacesContainer');
+    const routeContainerEl = document.getElementById('routeContainer');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    let deviceRecord = null;
+    let latestInfo = null;
+    let autoTimer = null;
+
+    refreshBtn.addEventListener('click', () => {
+      if (deviceId) {
+        loadLatestInfo(true);
+      }
+    });
+
+    function formatTimestamp(epoch) {
+      if (!epoch) return 'N/A';
+      const dt = new Date(epoch * 1000);
+      if (Number.isNaN(dt.getTime())) return 'N/A';
+      return dt.toLocaleString();
+    }
+
+    function setCommandStatus(message, isError = false, showSpinner = false) {
+      if (!message) {
+        commandStatusEl.textContent = '';
+        return;
+      }
+      if (showSpinner) {
+        commandStatusEl.innerHTML = `<span class="spinner"></span>${message}`;
+      } else {
+        commandStatusEl.textContent = message;
+      }
+      commandStatusEl.style.color = isError ? '#F87171' : 'var(--text-secondary)';
+    }
+
+    function renderDeviceHeader() {
+      if (!deviceRecord) {
+        deviceTitleEl.textContent = 'Device not found';
+        deviceStatusEl.textContent = '';
+        return;
+      }
+      const host = deviceRecord.host || '(unknown host)';
+      const displayName = deviceRecord.display_name ? ` (${deviceRecord.display_name})` : '';
+      deviceTitleEl.textContent = `${host}${displayName}`;
+      deviceStatusEl.textContent = `Status: ${deviceRecord.status || 'unknown'} | Platform: ${deviceRecord.platform || '-'}`;
+    }
+
+    function renderDeviceMeta() {
+      if (!deviceRecord) return;
+      deviceMetaEl.style.display = 'grid';
+      deviceMetaEl.innerHTML = '';
+      const items = [
+        { label: 'Primary Host', value: deviceRecord.host || '-' },
+        { label: 'Display Name', value: deviceRecord.display_name || '-' },
+        { label: 'Platform', value: deviceRecord.platform || '-' },
+        { label: 'Depth', value: deviceRecord.depth ?? '-' },
+        { label: 'Parent', value: deviceRecord.parent || '-' }
+      ];
+      if (latestInfo) {
+        items.push({ label: 'Last Updated', value: formatTimestamp(latestInfo.updated_at) });
+        items.push({ label: 'Worker Status', value: latestInfo.latest_status || latestInfo.status || '-' });
+      }
+      items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'meta-item';
+        div.innerHTML = `<label>${item.label}</label><span>${item.value}</span>`;
+        deviceMetaEl.appendChild(div);
+      });
+    }
+
+    function parseShowIpInterfaceBrief(output) {
+      const results = [];
+      if (!output) return results;
+      const lines = output.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const headerIndex = lines.findIndex(line => /^Interface\s+IP-Address/i.test(line));
+      const dataLines = headerIndex >= 0 ? lines.slice(headerIndex + 1) : lines;
+      dataLines.forEach(line => {
+        if (!line || line.startsWith('---')) return;
+        const tokens = line.split(/\s+/);
+        if (tokens.length < 6) return;
+        const iface = tokens[0];
+        const ipAddress = tokens[1];
+        const ok = tokens[2];
+        const method = tokens[3];
+        const protocol = tokens[tokens.length - 1];
+        const statusTokens = tokens.slice(4, tokens.length - 1);
+        const status = statusTokens.join(' ');
+        results.push({
+          name: iface,
+          ip: ipAddress,
+          ok,
+          method,
+          status,
+          protocol
+        });
+      });
+      return results;
+    }
+
+    function renderInterfaces(parsed) {
+      if (!parsed || !parsed.length) {
+        interfacesContainerEl.innerHTML = '<p class="empty-state">No interface summary available yet. Background updates run every few seconds.</p>';
+        return;
+      }
+      const table = document.createElement('table');
+      table.className = 'interface-table';
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Interface</th>
+            <th>IP Address</th>
+            <th>Status</th>
+            <th>Protocol</th>
+          </tr>
+        </thead>
+      `;
+      const tbody = document.createElement('tbody');
+      parsed.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.name}</td>
+          <td>${row.ip}</td>
+          <td>${row.status}</td>
+          <td>${row.protocol}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      interfacesContainerEl.innerHTML = '';
+      interfacesContainerEl.appendChild(table);
+    }
+
+    async function loadLatestInfo(showSpinner = false) {
+      if (!deviceId) return;
+      try {
+        if (showSpinner) {
+          setCommandStatus('Loading latest interface summary...', false, true);
+          interfacesContainerEl.innerHTML = '<p class="empty-state">Loading...</p>';
+          routeContainerEl.textContent = 'Loading routing table...';
+        }
+        const info = await api(`/api/devices/${deviceId}/info/latest`);
+        latestInfo = info;
+        let ifaceOutput = '';
+        let routeOutput = '';
+        if (info.results) {
+          info.results.forEach(item => {
+            if (item.command && item.command.toLowerCase().includes('interface brief')) {
+              ifaceOutput = item.output || '';
+            } else if (item.command && item.command.toLowerCase().includes('ip route')) {
+              routeOutput = item.output || '';
+            }
+          });
+        }
+        const parsed = parseShowIpInterfaceBrief(ifaceOutput);
+        renderDeviceMeta();
+        renderInterfaces(parsed);
+        routeContainerEl.textContent = routeOutput || 'No routing information available.';
+        if (info.status === 'succeeded') {
+          const ts = formatTimestamp(info.updated_at);
+          let message = `Last updated ${ts}`;
+          if (info.fallback) {
+            const latestTs = formatTimestamp(info.latest_updated_at);
+            message += latestTs != 'N/A' ? ` • Showing previous data (latest job ${info.latest_status} at ${latestTs})` : ' • Showing previous data';
+          }
+          setCommandStatus(message + (info.cached ? ' (cached)' : ''));
+        } else if (info.latest_status === 'queued' || info.latest_status === 'running') {
+          setCommandStatus('Worker is collecting interface summary...', false, true);
+        } else {
+          setCommandStatus(info.error || 'No interface summary available.', true);
+        }
+      } catch (e) {
+        setCommandStatus(e.message || 'Failed to load interface summary.', true);
+      }
+    }
+
+    async function init() {
+      if (!deviceId) {
+        deviceTitleEl.textContent = 'Missing device_id parameter';
+        interfacesContainerEl.innerHTML = '<p class="empty-state">Please provide a device_id in the URL.</p>';
+        setCommandStatus('Cannot load interface information without a device.', true);
+        refreshBtn.disabled = true;
+        return;
+      }
+      try {
+        const allDevices = await api('/api/devices');
+        deviceRecord = allDevices.find(d => d._id === deviceId);
+        renderDeviceHeader();
+        if (!deviceRecord) {
+          interfacesContainerEl.innerHTML = '<p class="empty-state">Device not found.</p>';
+          setCommandStatus('Device not found.', true);
+          refreshBtn.disabled = true;
+          return;
+        }
+        await loadLatestInfo(true);
+        refreshBtn.disabled = false;
+        autoTimer = setInterval(() => loadLatestInfo(false), AUTO_REFRESH_MS);
+      } catch (e) {
+        deviceTitleEl.textContent = 'Failed to load device';
+        interfacesContainerEl.innerHTML = `<p class="empty-state">${e.message || 'Unable to load device details.'}</p>`;
+        setCommandStatus(e.message || 'Unable to load device details.', true);
+        refreshBtn.disabled = true;
+      }
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (autoTimer) clearInterval(autoTimer);
+    });
+
+    init();
+  </script>
+</body>
+
+</html>

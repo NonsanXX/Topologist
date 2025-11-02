@@ -83,3 +83,13 @@ def discover_all():
         enqueue("discovery", job)
         count += 1
     return {"queued": count, "note": "Included ready and error devices for retry"}
+
+
+@app.post("/queue/commands")
+def queue_commands(payload: dict = Body(...)):
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "payload must be an object")
+    if "type" not in payload or "job_id" not in payload:
+        raise HTTPException(400, "job_id and type required")
+    enqueue("commands", payload)
+    return {"queued": True}
