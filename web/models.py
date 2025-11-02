@@ -345,7 +345,7 @@ def run_device_command(device_id: str, payload: dict):
     try:
         with ConnectHandler(**device_config) as net_connect:
             # ตรวจสอบว่าเป็นคำสั่ง config หรือไม่
-            if re.search(r'^(conf|hostname|interface|ip route|enable)', command.strip(), re.IGNORECASE):
+            if re.search(r'^(conf|hostname|int(erface)?|ip route|enable)', command.strip(), re.IGNORECASE):
                 # ถ้าเป็น config, ส่งเป็น list
                 commands_list = command.split('\n')
                 output = net_connect.send_config_set(commands_list)
