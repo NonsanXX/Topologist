@@ -9,7 +9,7 @@ from routes import (
     get_devices_handler, add_device_handler, delete_device_handler,
     save_device_creds_handler, update_device_handler,
     latest_topology_handler, topology_graph_handler, clear_topology_handler,
-    api_discover_handler, discover_all_handler
+    api_discover_handler, discover_all_handler, run_command_handler
 )
 
 app = FastAPI(title="Topologist Web")
@@ -82,6 +82,9 @@ def save_creds(device_id: str, payload: dict = Body(...)):
 def update_device(device_id: str, payload: dict = Body(...)):
     return update_device_handler(device_id, payload)
 
+@app.post("/api/devices/{device_id}/run_command")
+def run_command(device_id: str, payload: dict = Body(...)):
+    return run_command_handler(device_id, payload)
 
 # ---------- Topology ----------
 @app.get("/api/topology/latest")

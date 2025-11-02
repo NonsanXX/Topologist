@@ -7,7 +7,7 @@ from models import (
     list_identities, get_identity, add_identity, set_default_identity,
     unset_default_identity, update_identity, delete_identity,
     list_devices, add_device, delete_device, save_device_creds, update_device,
-    latest_topology, topology_graph, clear_topology
+    latest_topology, topology_graph, clear_topology, run_device_command
 )
 
 
@@ -70,6 +70,9 @@ def update_device_handler(device_id: str, payload: dict = Body(...)):
     """Handler for PATCH /api/devices/{device_id}"""
     return update_device(device_id, payload)
 
+def run_command_handler(device_id: str, payload: dict = Body(...)):
+    """Handler for POST /api/devices/{device_id}/run_command"""
+    return run_device_command(device_id, payload)
 
 def latest_topology_handler():
     """Handler for GET /api/topology/latest"""

@@ -1,6 +1,8 @@
 import time
 from fastapi import HTTPException, Body
 from bson.objectid import ObjectId
+from netmiko import ConnectHandler
+import re
 
 from database import db
 
@@ -293,3 +295,67 @@ def clear_topology():
     gl = db.graph_links.delete_many({}).deleted_count
     tp = db.topology.delete_many({}).deleted_count
     return {"cleared": True, "graph_nodes": gn, "graph_links": gl, "topology_docs": tp}
+
+def run_device_command(device_id: str, payload: dict):
+    """Connect to a device via SSH and run a command."""
+    command = (payload.get("command") or "").strip()
+    if not command:
+        raise HTTPException(400, "command required")
+
+    try:
+        oid = ObjectId(device_id)
+    except:
+        raise HTTPException(400, "invalid device id")
+
+    dev = db.devices.find_one({"_id": oid})
+    if not dev:
+        raise HTTPException(404, "device not found")
+
+    host = dev.get("host")
+    platform = dev.get("platform", "cisco_ios") # ใช้ cisco_ios เป็นค่าเริ่มต้น
+    username = dev.get("username")
+    password = dev.get("password")
+
+    # ถ้าไม่มี user/pass ใน device, ให้ดึงจาก identity ที่ผูกไว้
+    if not username or not password:
+        identity_id = dev.get("identity_id")
+        if identity_id:
+            try:
+                identity = db.identities.find_one({"_id": ObjectId(identity_id)})
+                if identity:
+                    username = identity.get("username")
+                    password = identity.get("password")
+                else:
+                    raise HTTPException(400, "Device identity not found, but was linked")
+            except:
+                raise HTTPException(400, "Invalid identity_id format")
+    
+    if not host or not username or not password:
+        raise HTTPException(400, f"Device {host} is missing host or credentials")
+
+    device_config = {
+        "device_type": platform,
+        "host": host,
+        "username": username,
+        "password": password,
+        "global_delay_factor": 2, # เพิ่ม delay factor เพื่อความเสถียร
+    }
+
+    output = ""
+    try:
+        with ConnectHandler(**device_config) as net_connect:
+            # ตรวจสอบว่าเป็นคำสั่ง config หรือไม่
+            if re.search(r'^(conf|hostname|interface|ip route|enable)', command.strip(), re.IGNORECASE):
+                # ถ้าเป็น config, ส่งเป็น list
+                commands_list = command.split('\n')
+                output = net_connect.send_config_set(commands_list)
+            else:
+                # ถ้าเป็น show, ส่งคำสั่งเดียว
+                output = net_connect.send_command(command)
+        
+        # ถ้ามีการเปลี่ยน hostname, ควรสั่ง re-discover (ข้ามไปก่อน)
+        
+        return {"output": output}
+    except Exception as e:
+        # ส่ง Error กลับไปแสดงผลในหน้าเว็บ
+        return {"output": f"ERROR: {str(e)}"}

@@ -13,6 +13,52 @@
   
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <style>
+    .modal-backdrop {
+      position: fixed; z-index: 1000; top: 0; left: 0;
+      width: 100%; height: 100%;
+      /* มันจะไปดึงสี --background จาก style.css ของคุณมาใช้ */
+      background: rgba(0, 0, 0, 0.6); 
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-content {
+      /* มันจะไปดึงสี --surface จาก style.css ของคุณมาใช้ */
+      background: var(--surface); 
+      color: var(--text-primary);
+      border-radius: var(--radius-md); /* ใช้ --radius-md ของคุณ */
+      width: 90%; max-width: 700px;
+      box-shadow: var(--shadow-lg); /* ใช้ --shadow-lg ของคุณ */
+      animation: modal-fade-in 0.2s ease-out;
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 24px; 
+      border-bottom: 1px solid var(--border-color); /* ใช้ --border-color */
+    }
+    .modal-header h2 { margin: 0; }
+    .modal-close {
+      background: none; border: none; font-size: 28px;
+      color: var(--text-secondary); /* ใช้ --text-secondary */
+      cursor: pointer; padding: 0; line-height: 1;
+    }
+    .modal-body { padding: 24px; }
+    .form-group-col { display: flex; flex-direction: column; }
+    .form-group-col label { margin-bottom: 8px; font-weight: 500; }
+    .form-group-col textarea { min-height: 100px; font-family: monospace; }
+    .output-box {
+      background: #202225; /* สีพื้นหลัง terminal เข้มๆ */
+      color: var(--text-secondary);
+      padding: 12px; border-radius: var(--radius-sm);
+      min-height: 150px; max-height: 400px;
+      overflow-y: auto; white-space: pre-wrap;
+      word-break: break-all; font-family: monospace;
+      font-size: 14px;
+    }
+    @keyframes modal-fade-in {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
 </head>
 
 <body>
@@ -342,7 +388,11 @@
   <td>${pill(d.status)}</td>
   <td>${d.depth ?? ''}</td>
   <td>${d.parent ?? ''}</td>
-  <td class="action-cell"><button class="btn btn-sm btn-danger" onclick="delDev('${d._id}')">Delete</button></td>`; tb.appendChild(tr);
+  <td class="action-cell">
+    <button class="btn btn-sm btn-danger" onclick="delDev('${d._id}')">Delete</button>
+    <button class="btn btn-sm btn-primary" style="margin-right: 4px;" onclick="openCommandModal('${d._id}', '${d.host}')">Config</button>
+    </td>`; tb.appendChild(tr);
+  
       }); attachInlineHandlers();
     }
     function inlineCell(id, field, value, placeholderLabel) { const safe = escAttr(value || ''); const placeholder = safe ? '' : `<span class='inline-placeholder'>(${placeholderLabel || field})</span>`; return `<div class="inline-wrap" data-field="${field}" data-id="${id}"><span class="txt">${safe || ''}${placeholder}</span><input class="inline-editor" value="${safe}" style="display:none;" placeholder="${placeholderLabel || field}"></div>`; }
@@ -527,6 +577,61 @@
       cy.add(nodes.concat(edges));
       cy.layout({ name: 'cose' }).run();
     }
+    let currentManagingDeviceId = null; 
+  
+  function openCommandModal(deviceId, hostIp) {
+    currentManagingDeviceId = deviceId;
+    document.getElementById('modalTitle').textContent = `Manage: ${hostIp || deviceId}`;
+    document.getElementById('commandInput').value = ''; // เคลียร์ช่อง input
+    document.getElementById('commandOutput').textContent = ''; // เคลียร์ช่อง output
+    document.getElementById('commandModalBackdrop').style.display = 'flex';
+  }
+
+  function closeCommandModal() {
+    currentManagingDeviceId = null;
+    document.getElementById('commandModalBackdrop').style.display = 'none';
+  }
+
+  async function runCommand() {
+    if (!currentManagingDeviceId) return;
+
+    const command = document.getElementById('commandInput').value;
+    const outputBox = document.getElementById('commandOutput');
+    
+    if (!command) {
+      outputBox.textContent = 'Please enter a command.';
+      return;
+    }
+
+    outputBox.textContent = 'Running...';
+
+    try {
+      const result = await api(`/api/devices/${currentManagingDeviceId}/run_command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: command })
+      });
+      
+      // แสดงผลลัพธ์
+      outputBox.textContent = result.output;
+
+      // ถ้ามีการเปลี่ยน hostname (เช่น "hostname R1-NEW")
+      // เราควรอัปเดตตาราง Inventory ด้วย
+      if (command.includes('hostname')) {
+        await list(); // รีเฟรชตาราง
+      }
+
+    } catch (e) {
+      outputBox.textContent = 'Error: ' + e.message;
+    }
+  }
+
+  // ปิด Modal ถ้าคลิกพื้นหลังสีดำ
+  document.getElementById('commandModalBackdrop').onclick = (e) => {
+    if (e.target.id === 'commandModalBackdrop') {
+      closeCommandModal();
+    }
+  };
     // Initial load
     listIdentities();
     list();
@@ -536,6 +641,31 @@
     if (document.getElementById('autoRefreshTopoChk')?.checked) toggleTopoAutoRefresh();
 
   </script>
+  <div id="commandModalBackdrop" class="modal-backdrop" style="display: none;">
+  <div id="commandModal" class="modal-content">
+    
+    <div class="modal-header">
+      <h2 id="modalTitle">Manage Device</h2>
+      <button class="modal-close" onclick="closeCommandModal()">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <div class="form-group-col">
+        <label for="commandInput">Enter command(s) (e.g., "show ip int br" or "conf t\nhostname NEW-RTR"):</label>
+        <textarea id="commandInput" class="input" rows="5"></textarea>
+      </div>
+      <button class="btn btn-success" onclick="runCommand()">Run Command</button>
+      
+      <hr style="margin: 20px 0;">
+      
+      <div class="form-group-col">
+        <label>Output:</label>
+        <pre id="commandOutput" class="output-box"></pre>
+      </div>
+    </div>
+
+  </div>
+</div>
 </body>
 
 </html>

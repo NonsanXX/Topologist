@@ -51,7 +51,7 @@ services:
     environment:
       - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
       - DB_NAME=${DB_NAME}
-      - SCHEDULER_URL=http://scheduler:5001
+      - SCHEDULER_URLhttp://scheduler:5001=http://scheduler:5001
     networks:
       - app-net
     ports: [ "8000:8000" ]
