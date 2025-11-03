@@ -115,17 +115,209 @@
       font-size: 0.95rem;
       padding: 1rem 0;
     }
-    .output-block {
-      background: #111827;
+    .route-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .route-summary {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 1rem;
+      background: var(--surface-elevated);
+      border: 1px dashed var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1rem 1.25rem;
+    }
+    .route-summary-count {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .route-summary-count strong {
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+    .route-summary-count .label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+    .route-summary-count .meta {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+    .route-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .route-legend-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid transparent;
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--text-secondary);
+    }
+    .route-legend-chip small {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .route-legend-chip span {
+      font-weight: 600;
+    }
+    .legend-badge {
+      width: 0.65rem;
+      height: 0.65rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      display: inline-flex;
+    }
+    .legend-badge.route-type--connected { background: #10B981; border-color: rgba(16, 185, 129, 0.25); }
+    .legend-badge.route-type--local { background: #3B82F6; border-color: rgba(59, 130, 246, 0.3); }
+    .legend-badge.route-type--static { background: #F59E0B; border-color: rgba(245, 158, 11, 0.35); }
+    .legend-badge.route-type--ospf { background: #8B5CF6; border-color: rgba(139, 92, 246, 0.35); }
+    .legend-badge.route-type--eigrp { background: #F87171; border-color: rgba(248, 113, 113, 0.35); }
+    .legend-badge.route-type--rip { background: #F97316; border-color: rgba(249, 115, 22, 0.35); }
+    .legend-badge.route-type--bgp { background: #14B8A6; border-color: rgba(20, 184, 166, 0.35); }
+    .legend-badge.route-type--other { background: #64748B; border-color: rgba(100, 116, 139, 0.35); }
+    .route-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+    .route-card {
+      background: var(--surface-elevated);
       border-radius: var(--radius-md);
       border: 1px solid var(--border-color);
-      padding: 1rem;
+      box-shadow: var(--shadow-sm);
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .route-description {
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+    .route-card--default {
+      border-color: rgba(59, 130, 246, 0.55);
+      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+    }
+    .route-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .route-type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .route-type--connected {
+      background: rgba(52, 211, 153, 0.2);
+      color: #10B981;
+    }
+    .route-type--local {
+      background: rgba(96, 165, 250, 0.2);
+      color: #3B82F6;
+    }
+    .route-type--static {
+      background: rgba(251, 191, 36, 0.18);
+      color: #F59E0B;
+    }
+    .route-type--ospf {
+      background: rgba(167, 139, 250, 0.2);
+      color: #8B5CF6;
+    }
+    .route-type--eigrp {
+      background: rgba(248, 113, 113, 0.2);
+      color: #F87171;
+    }
+    .route-type--bgp {
+      background: rgba(94, 234, 212, 0.2);
+      color: #14B8A6;
+    }
+    .route-type--rip {
+      background: rgba(251, 146, 60, 0.2);
+      color: #F97316;
+    }
+    .route-type--other {
+      background: rgba(148, 163, 184, 0.2);
+      color: #64748B;
+    }
+    .route-code {
       font-family: "Source Code Pro", "Consolas", monospace;
-      font-size: 0.85rem;
-      color: #F9FAFB;
-      white-space: pre-wrap;
-      overflow-x: auto;
-      max-height: 320px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .route-destination {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .route-destination span.value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .route-destination span.label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .route-destination span.meta {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+    .route-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+    }
+    .route-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .route-meta-item label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .route-meta-item span {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.04);
+      font-weight: 600;
+      color: var(--text-primary);
+      word-break: normal;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .spinner {
       display: inline-block;
@@ -185,7 +377,9 @@
         <div class="info-header">
           <h2>Routing Table</h2>
         </div>
-        <div id="routeContainer" class="output-block">No routing information yet.</div>
+        <div id="routeContainer" class="route-container">
+          <p class="empty-state">No routing information yet.</p>
+        </div>
       </section>
     </div>
   </main>
@@ -306,6 +500,126 @@
       return results;
     }
 
+    const ROUTE_TYPE_META = {
+      connected: { label: 'Connected', description: 'Directly attached network', badgeClass: 'route-type--connected', codes: ['C'] },
+      local: { label: 'Local', description: 'Host route to local interface', badgeClass: 'route-type--local', codes: ['L'] },
+      static: { label: 'Static', description: 'Static route', badgeClass: 'route-type--static', codes: ['S'] },
+      ospf: { label: 'OSPF', description: 'OSPF-learned route', badgeClass: 'route-type--ospf', codes: ['O'] },
+      eigrp: { label: 'EIGRP', description: 'EIGRP-learned route', badgeClass: 'route-type--eigrp', codes: ['D'] },
+      rip: { label: 'RIP', description: 'RIP-learned route', badgeClass: 'route-type--rip', codes: ['R'] },
+      bgp: { label: 'BGP', description: 'BGP-learned route', badgeClass: 'route-type--bgp', codes: ['B'] },
+      other: { label: 'Other', description: 'Additional routing sources', badgeClass: 'route-type--other', codes: [] }
+    };
+
+    function normalizeRouteCode(code) {
+      if (!code) return '';
+      return code.replace(/[^A-Z]/gi, '').toUpperCase();
+    }
+
+    function detectRouteType(code) {
+      const normalized = normalizeRouteCode(code);
+      if (!normalized) return { key: 'other', ...ROUTE_TYPE_META.other };
+      for (const [key, meta] of Object.entries(ROUTE_TYPE_META)) {
+        if (key === 'other') continue;
+        if (meta.codes.some(prefix => normalized.startsWith(prefix))) {
+          return { key, ...meta };
+        }
+      }
+      return { key: 'other', ...ROUTE_TYPE_META.other };
+    }
+
+    function parseShowIpRoute(output) {
+      const result = {
+        routes: [],
+        summary: { total: 0, defaultCount: 0, byType: {} },
+        defaultGateway: null,
+        typesUsed: new Set()
+      };
+      if (!output) return result;
+      const lines = output.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const routeRegex = /^([A-Z\*\+\!][A-Z\*\+\!]*)\s+(\S+)\s+(.*)$/;
+      lines.forEach(line => {
+        if (!line) return;
+        const lower = line.toLowerCase();
+        if (lower.startsWith('gateway of last resort')) {
+          result.defaultGateway = line.replace(/gateway of last resort is/i, '').trim() || null;
+          return;
+        }
+        if (lower.startsWith('codes:')) return;
+        const match = line.match(routeRegex);
+        if (!match) return;
+        const code = match[1];
+        const prefix = match[2];
+        if (prefix === '-' || prefix === '—') return;
+        let rest = match[3].trim();
+        let metricText = '';
+        let via = '';
+        let iface = '';
+        let age = '';
+
+        const viaIdx = rest.indexOf(' via ');
+        if (viaIdx >= 0) {
+          metricText = rest.substring(0, viaIdx).trim();
+          rest = rest.substring(viaIdx + 5);
+          const parts = rest.split(',').map(p => p.trim()).filter(Boolean);
+          via = parts[0] || '';
+          if (parts.length >= 3) {
+            age = parts.slice(1, parts.length - 1).join(', ');
+            iface = parts[parts.length - 1] || '';
+          } else if (parts.length === 2) {
+            if (parts[1] && parts[1].includes(':')) {
+              age = parts[1];
+            } else {
+              iface = parts[1];
+            }
+          }
+          if (!iface && parts.length) iface = parts[parts.length - 1] || '';
+        } else if (rest.includes('is directly connected')) {
+          metricText = rest.replace(/ is directly connected.*/i, '').trim();
+          via = 'Directly connected';
+          const parts = rest.split(',').map(p => p.trim()).filter(Boolean);
+          iface = parts[parts.length - 1] || '';
+        } else {
+          metricText = rest;
+        }
+
+        let adminDistance = '';
+        let metric = '';
+        if (metricText.startsWith('[') && metricText.endsWith(']')) {
+          const inner = metricText.slice(1, -1);
+          const [ad, met] = inner.split('/');
+          adminDistance = ad || '';
+          metric = met || '';
+        } else {
+          metric = metricText;
+        }
+
+        const typeInfo = detectRouteType(code);
+        const isDefault = code.includes('*') || prefix === '0.0.0.0/0';
+
+        result.routes.push({
+          code,
+          prefix,
+          type: typeInfo.key,
+          typeLabel: typeInfo.label,
+          badgeClass: typeInfo.badgeClass,
+          description: `${typeInfo.description}${isDefault ? ' • Default route' : ''}`,
+          metric,
+          adminDistance,
+          via,
+          iface,
+          age,
+          isDefault
+        });
+
+        result.summary.total += 1;
+        if (isDefault) result.summary.defaultCount += 1;
+        result.summary.byType[typeInfo.key] = (result.summary.byType[typeInfo.key] || 0) + 1;
+        result.typesUsed.add(typeInfo.key);
+      });
+      return result;
+    }
+
     function renderInterfaces(parsed) {
       if (!parsed || !parsed.length) {
         interfacesContainerEl.innerHTML = '<p class="empty-state">No interface summary available yet. Background updates run every few seconds.</p>';
@@ -339,13 +653,111 @@
       interfacesContainerEl.appendChild(table);
     }
 
+    function renderRoutes(parsed) {
+      if (!parsed || !parsed.routes || !parsed.routes.length) {
+        routeContainerEl.innerHTML = '<p class="empty-state">No routing information available.</p>';
+        return;
+      }
+      routeContainerEl.innerHTML = '';
+
+      const summary = document.createElement('div');
+      summary.className = 'route-summary';
+
+      const totalBlock = document.createElement('div');
+      totalBlock.className = 'route-summary-count';
+      totalBlock.innerHTML = `
+        <span class="label">Total Routes</span>
+        <strong>${parsed.summary.total}</strong>
+        <span class="meta">${parsed.summary.defaultCount} default · ${parsed.routes.filter(r => r.via && r.via !== 'Directly connected').length} next-hop</span>
+      `;
+      summary.appendChild(totalBlock);
+
+      if (parsed.defaultGateway) {
+        const defaultBlock = document.createElement('div');
+        defaultBlock.className = 'route-summary-count';
+        defaultBlock.innerHTML = `
+          <span class="label">Gateway of Last Resort</span>
+          <span class="meta">${parsed.defaultGateway}</span>
+        `;
+        summary.appendChild(defaultBlock);
+      }
+
+      const legend = document.createElement('div');
+      legend.className = 'route-legend';
+      const typesUsed = parsed.typesUsed instanceof Set ? parsed.typesUsed : new Set(parsed.typesUsed || []);
+      const typeOrder = ['connected', 'local', 'static', 'ospf', 'eigrp', 'rip', 'bgp', 'other'];
+      let legendCount = 0;
+      typeOrder.forEach(typeKey => {
+        if (!typesUsed.has(typeKey)) return;
+        const meta = ROUTE_TYPE_META[typeKey];
+        const chip = document.createElement('div');
+        chip.className = 'route-legend-chip';
+        chip.innerHTML = `<span class="legend-badge ${meta.badgeClass}"></span><span>${meta.label}</span><small>${parsed.summary.byType[typeKey]} route${parsed.summary.byType[typeKey] > 1 ? 's' : ''}</small>`;
+        legend.appendChild(chip);
+        legendCount += 1;
+      });
+      if (!legendCount) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'route-legend-chip';
+        placeholder.textContent = 'Route sources pending';
+        legend.appendChild(placeholder);
+      }
+      summary.appendChild(legend);
+
+      routeContainerEl.appendChild(summary);
+
+      const grid = document.createElement('div');
+      grid.className = 'route-grid';
+      parsed.routes.forEach(route => {
+        const card = document.createElement('article');
+        card.className = 'route-card';
+        if (route.isDefault) {
+          card.classList.add('route-card--default');
+        }
+        const metaLines = [];
+        if (route.metric) metaLines.push(`Metric ${route.metric}`);
+        if (route.adminDistance) metaLines.push(`AD ${route.adminDistance}`);
+        const metaHtml = metaLines.length ? `<span class="meta">${metaLines.join(' · ')}</span>` : '';
+        const ageHtml = route.age ? `
+          <div class="route-meta-item">
+            <label>Age</label>
+            <span>${route.age}</span>
+          </div>` : '';
+        card.innerHTML = `
+          <div class="route-card-header">
+            <span class="route-type-badge ${route.badgeClass || 'route-type--other'}">${route.typeLabel || 'Route'}</span>
+            <span class="route-code">${route.code}</span>
+          </div>
+          <p class="route-description">${route.description}</p>
+          <div class="route-destination">
+            <span class="label">Destination</span>
+            <span class="value">${route.prefix}</span>
+            ${metaHtml}
+          </div>
+          <div class="route-meta">
+            <div class="route-meta-item">
+              <label>Next Hop</label>
+              <span>${route.via || '—'}</span>
+            </div>
+            <div class="route-meta-item">
+              <label>Interface</label>
+              <span>${route.iface || '—'}</span>
+            </div>
+            ${ageHtml}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      routeContainerEl.appendChild(grid);
+    }
+
     async function loadLatestInfo(showSpinner = false) {
       if (!deviceId) return;
       try {
         if (showSpinner) {
           setCommandStatus('Loading latest interface summary...', false, true);
           interfacesContainerEl.innerHTML = '<p class="empty-state">Loading...</p>';
-          routeContainerEl.textContent = 'Loading routing table...';
+          routeContainerEl.innerHTML = '<p class="empty-state">Loading routing table...</p>';
         }
         const info = await api(`/api/devices/${deviceId}/info/latest`);
         latestInfo = info;
@@ -363,7 +775,8 @@
         const parsed = parseShowIpInterfaceBrief(ifaceOutput);
         renderDeviceMeta();
         renderInterfaces(parsed);
-        routeContainerEl.textContent = routeOutput || 'No routing information available.';
+        const routeParsed = parseShowIpRoute(routeOutput);
+        renderRoutes(routeParsed);
         if (info.status === 'succeeded') {
           const ts = formatTimestamp(info.updated_at);
           let message = `Last updated ${ts}`;
