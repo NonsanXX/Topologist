@@ -44,7 +44,9 @@ def establish_connection(dev, db):
             if conn:
                 print(f"[SSH] SSH chain connection successful to {seed_ip}")
                 return conn, True
-            raise Exception(f"SSH chain connection failed through path: {' -> '.join(path)}")
+            raise Exception(
+                f"SSH chain connection failed through path: {' -> '.join(path)}"
+            )
 
         raise Exception(f"Device unreachable: {direct_err}")
 
@@ -56,7 +58,9 @@ def run_command_list(conn, commands, use_timing=False):
             if use_timing:
                 out = conn.send_command_timing(cmd, delay_factor=4, read_timeout=60)
             else:
-                out = conn.send_command(cmd, expect_string=r"#", delay_factor=2, read_timeout=60)
+                out = conn.send_command(
+                    cmd, expect_string=r"#", delay_factor=2, read_timeout=60
+                )
         except Exception as exc:
             out = f"ERROR executing '{cmd}': {exc}"
         outputs.append((cmd, out))

@@ -6,10 +6,7 @@ from database import db
 from .devices import resolve_device_credentials
 from .queueing import queue_command_payload
 
-INFO_COMMANDS = [
-    "show ip interface brief",
-    "show ip route"
-]
+INFO_COMMANDS = ["show ip interface brief", "show ip route"]
 
 
 def run_device_info(device_id: str, force: bool = False):
@@ -21,14 +18,18 @@ def run_device_info(device_id: str, force: bool = False):
     resolve_device_credentials(oid)
 
     existing = db.device_info_jobs.find_one(
-        {"device_id": str(oid)},
-        sort=[("updated_at", -1)]
+        {"device_id": str(oid)}, sort=[("updated_at", -1)]
     )
-    if not force and existing and existing.get("status") == "succeeded" and existing.get("results"):
+    if (
+        not force
+        and existing
+        and existing.get("status") == "succeeded"
+        and existing.get("results")
+    ):
         return {
             "job_id": str(existing["_id"]),
             "cached": True,
-            "updated_at": existing.get("updated_at")
+            "updated_at": existing.get("updated_at"),
         }
 
     now = time.time()
@@ -67,10 +68,9 @@ def get_device_info_job(job_id: str):
 
     normalized_results = []
     for item in doc.get("results", []) or []:
-        normalized_results.append({
-            "command": item.get("command"),
-            "output": item.get("output")
-        })
+        normalized_results.append(
+            {"command": item.get("command"), "output": item.get("output")}
+        )
 
     return {
         "job_id": str(doc["_id"]),
@@ -88,8 +88,7 @@ def get_latest_device_info(device_id: str):
         raise HTTPException(400, "invalid device id")
 
     latest = db.device_info_jobs.find_one(
-        {"device_id": str(oid)},
-        sort=[("updated_at", -1)]
+        {"device_id": str(oid)}, sort=[("updated_at", -1)]
     )
     if not latest:
         raise HTTPException(404, "no interface summary available yet")
@@ -102,9 +101,9 @@ def get_latest_device_info(device_id: str):
             {
                 "device_id": str(oid),
                 "status": "succeeded",
-                "results": {"$exists": True, "$ne": []}
+                "results": {"$exists": True, "$ne": []},
             },
-            sort=[("updated_at", -1)]
+            sort=[("updated_at", -1)],
         )
         if fallback:
             doc = fallback
@@ -112,10 +111,9 @@ def get_latest_device_info(device_id: str):
 
     normalized_results = []
     for item in doc.get("results", []) or []:
-        normalized_results.append({
-            "command": item.get("command"),
-            "output": item.get("output")
-        })
+        normalized_results.append(
+            {"command": item.get("command"), "output": item.get("output")}
+        )
 
     return {
         "job_id": str(doc["_id"]),
@@ -126,5 +124,5 @@ def get_latest_device_info(device_id: str):
         "cached": doc.get("status") == "succeeded",
         "fallback": fallback_used,
         "latest_status": latest.get("status"),
-        "latest_updated_at": latest.get("updated_at")
+        "latest_updated_at": latest.get("updated_at"),
     }

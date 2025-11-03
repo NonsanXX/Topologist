@@ -19,8 +19,7 @@ async def device_info_refresh_loop():
                 for dev in devices:
                     device_id = str(dev["_id"])
                     latest_job = db.device_info_jobs.find_one(
-                        {"device_id": device_id},
-                        sort=[("updated_at", -1)]
+                        {"device_id": device_id}, sort=[("updated_at", -1)]
                     )
                     if latest_job:
                         status = latest_job.get("status")
@@ -31,7 +30,11 @@ async def device_info_refresh_loop():
                             continue
 
                         # Throttle refresh if the most recent result is still fresh
-                        if status == "succeeded" and updated_at and (now - updated_at) < REFRESH_INTERVAL:
+                        if (
+                            status == "succeeded"
+                            and updated_at
+                            and (now - updated_at) < REFRESH_INTERVAL
+                        ):
                             continue
                     try:
                         run_device_info(device_id, force=True)

@@ -15,7 +15,9 @@ def build_graph(seed_ip, links, db):
 
         if r_ip:
             device_by_ip = db.devices.find_one({"host": r_ip})
-            device_by_name = db.devices.find_one({"display_name": r_name, "host": {"$ne": ""}})
+            device_by_name = db.devices.find_one(
+                {"display_name": r_name, "host": {"$ne": ""}}
+            )
             device_by_alt_ip = db.devices.find_one({"alternate_ips": r_ip})
 
             if device_by_alt_ip:
@@ -38,7 +40,8 @@ def build_graph(seed_ip, links, db):
         else:
             edges.add((a, b, link.get("remote_port"), link.get("local_if")))
     return [{"id": n} for n in sorted(nodes)], [
-        {"source": a, "target": b, "ifSrc": x, "ifDst": y} for (a, b, x, y) in sorted(edges)
+        {"source": a, "target": b, "ifSrc": x, "ifDst": y}
+        for (a, b, x, y) in sorted(edges)
     ]
 
 
@@ -50,7 +53,9 @@ def upsert_graph(seed_ip, links, db):
 
         if r_ip:
             device_by_ip = db.devices.find_one({"host": r_ip})
-            device_by_name = db.devices.find_one({"display_name": r_name, "host": {"$ne": ""}})
+            device_by_name = db.devices.find_one(
+                {"display_name": r_name, "host": {"$ne": ""}}
+            )
             device_by_alt_ip = db.devices.find_one({"alternate_ips": r_ip})
 
             if device_by_alt_ip:
@@ -68,13 +73,19 @@ def upsert_graph(seed_ip, links, db):
 
         db.graph_nodes.update_one(
             {"_id": seed_ip},
-            {"$set": {"id": seed_ip, "last_seen": now}, "$setOnInsert": {"first_seen": now}},
+            {
+                "$set": {"id": seed_ip, "last_seen": now},
+                "$setOnInsert": {"first_seen": now},
+            },
             upsert=True,
         )
 
         db.graph_nodes.update_one(
             {"_id": remote_id},
-            {"$set": {"id": remote_id, "last_seen": now}, "$setOnInsert": {"first_seen": now}},
+            {
+                "$set": {"id": remote_id, "last_seen": now},
+                "$setOnInsert": {"first_seen": now},
+            },
             upsert=True,
         )
 
@@ -84,19 +95,24 @@ def upsert_graph(seed_ip, links, db):
         edge_id = f"{a}|{b}"
         db.graph_links.update_one(
             {"_id": edge_id},
-            {"$set": {"a": a, "b": b, "ifA": if_a, "ifB": if_b, "last_seen": now}, "$setOnInsert": {"first_seen": now}},
+            {
+                "$set": {"a": a, "b": b, "ifA": if_a, "ifB": if_b, "last_seen": now},
+                "$setOnInsert": {"first_seen": now},
+            },
             upsert=True,
         )
 
 
 def write_topology(seed_ip, nodes, edges, brief, db):
-    db.topology.insert_one({
-        "created_at": time.time(),
-        "seed": seed_ip,
-        "nodes": nodes,
-        "links": edges,
-        "interface_brief": brief,
-    })
+    db.topology.insert_one(
+        {
+            "created_at": time.time(),
+            "seed": seed_ip,
+            "nodes": nodes,
+            "links": edges,
+            "interface_brief": brief,
+        }
+    )
 
 
 def do_discovery_job(job, db):
@@ -110,7 +126,9 @@ def do_discovery_job(job, db):
         print("device missing", oid)
         return
 
-    db.devices.update_one({"_id": oid}, {"$set": {"status": "scanning", "last_seen": time.time()}})
+    db.devices.update_one(
+        {"_id": oid}, {"$set": {"status": "scanning", "last_seen": time.time()}}
+    )
 
     conn = None
     used_proxy = False
@@ -119,7 +137,9 @@ def do_discovery_job(job, db):
         seed_ip = dev["host"]
 
         if not seed_ip or seed_ip.strip() == "":
-            db.devices.update_one({"_id": oid}, {"$set": {"status": "needs_ip", "last_seen": time.time()}})
+            db.devices.update_one(
+                {"_id": oid}, {"$set": {"status": "needs_ip", "last_seen": time.time()}}
+            )
             print(f"no IP for device {dev.get('display_name', oid)}")
             return
 
@@ -131,7 +151,9 @@ def do_discovery_job(job, db):
         conn, used_proxy = establish_connection(dev, db)
 
         if used_proxy:
-            out = conn.send_command_timing("show cdp neighbors detail", delay_factor=4, read_timeout=30)
+            out = conn.send_command_timing(
+                "show cdp neighbors detail", delay_factor=4, read_timeout=30
+            )
         else:
             out = conn.send_command("show cdp neighbors detail", expect_string=r"#")
 
@@ -140,16 +162,22 @@ def do_discovery_job(job, db):
 
         if not links:
             if used_proxy:
-                out = conn.send_command_timing("show lldp neighbors detail", delay_factor=4, read_timeout=30)
+                out = conn.send_command_timing(
+                    "show lldp neighbors detail", delay_factor=4, read_timeout=30
+                )
             else:
-                out = conn.send_command("show lldp neighbors detail", expect_string=r"#")
+                out = conn.send_command(
+                    "show lldp neighbors detail", expect_string=r"#"
+                )
             links = parse_lldp_cisco(out)
             for l in links:
                 l["device_type"] = None
             used_proto = "lldp_fallback"
 
         if used_proxy:
-            brief = conn.send_command_timing("show ip interface brief", delay_factor=4, read_timeout=30)
+            brief = conn.send_command_timing(
+                "show ip interface brief", delay_factor=4, read_timeout=30
+            )
         else:
             brief = conn.send_command("show ip interface brief", expect_string=r"#")
 
@@ -158,16 +186,22 @@ def do_discovery_job(job, db):
         nodes, edges = build_graph(seed_ip, links, db)
         write_topology(seed_ip, nodes, edges, brief, db)
         upsert_graph(seed_ip, links, db)
-        db.devices.update_one({"_id": oid}, {"$set": {"status": "ready", "last_seen": time.time()}})
+        db.devices.update_one(
+            {"_id": oid}, {"$set": {"status": "ready", "last_seen": time.time()}}
+        )
 
         conn_method = "proxy" if used_proxy else "direct"
-        print(f"[DISCOVERY] seed={seed_ip} method={conn_method} protocol={used_proto} neighbors={len(links)}")
+        print(
+            f"[DISCOVERY] seed={seed_ip} method={conn_method} protocol={used_proto} neighbors={len(links)}"
+        )
 
         default_identity = db.identities.find_one({"is_default": True})
         default_identity_id = str(default_identity["_id"]) if default_identity else None
         default_username = default_identity["username"] if default_identity else None
         default_password = default_identity["password"] if default_identity else None
-        default_status = "ready" if (default_username and default_password) else "needs_creds"
+        default_status = (
+            "ready" if (default_username and default_password) else "needs_creds"
+        )
 
         new_devices_added = False
 
@@ -175,28 +209,34 @@ def do_discovery_job(job, db):
             r_ip = link.get("remote_mgmt_ip")
             rname = link.get("remote_sysname")
             r_type = link.get("device_type")
-            print(f"  neighbor name={rname} ip={r_ip or '-'} type={r_type} local_if={link.get('local_if')} remote_port={link.get('remote_port')}")
+            print(
+                f"  neighbor name={rname} ip={r_ip or '-'} type={r_type} local_if={link.get('local_if')} remote_port={link.get('remote_port')}"
+            )
             if not r_ip:
                 existing = db.devices.find_one({"display_name": rname, "host": ""})
                 if not existing:
-                    db.devices.insert_one({
-                        "host": "",
-                        "display_name": rname,
-                        "platform": "cisco_ios",
-                        "identity_id": default_identity_id,
-                        "username": default_username,
-                        "password": default_password,
-                        "status": default_status,
-                        "depth": depth + 1,
-                        "parent": seed_ip,
-                        "device_type": r_type if r_type != 'unknown' else None,
-                        "created_at": time.time(),
-                        "last_seen": None,
-                    })
+                    db.devices.insert_one(
+                        {
+                            "host": "",
+                            "display_name": rname,
+                            "platform": "cisco_ios",
+                            "identity_id": default_identity_id,
+                            "username": default_username,
+                            "password": default_password,
+                            "status": default_status,
+                            "depth": depth + 1,
+                            "parent": seed_ip,
+                            "device_type": r_type if r_type != "unknown" else None,
+                            "created_at": time.time(),
+                            "last_seen": None,
+                        }
+                    )
                     new_devices_added = True
                 continue
 
-            existing_by_name = db.devices.find_one({"display_name": rname, "host": {"$ne": ""}})
+            existing_by_name = db.devices.find_one(
+                {"display_name": rname, "host": {"$ne": ""}}
+            )
             existing_by_ip = db.devices.find_one({"host": r_ip})
 
             if existing_by_name and not existing_by_ip:
@@ -209,13 +249,18 @@ def do_discovery_job(job, db):
 
                     db.devices.update_one(
                         {"_id": existing_by_name["_id"]},
-                        {"$set": {"alternate_ips": alternate_ips, "interface_map": interface_map}}
+                        {
+                            "$set": {
+                                "alternate_ips": alternate_ips,
+                                "interface_map": interface_map,
+                            }
+                        },
                     )
 
                 if existing_by_name.get("depth", 999) > depth + 1:
                     db.devices.update_one(
                         {"_id": existing_by_name["_id"]},
-                        {"$set": {"depth": depth + 1, "parent": seed_ip}}
+                        {"$set": {"depth": depth + 1, "parent": seed_ip}},
                     )
                 continue
 
@@ -231,7 +276,7 @@ def do_discovery_job(job, db):
                     "status": default_status,
                     "depth": depth + 1,
                     "parent": seed_ip,
-                    "device_type": r_type if r_type != 'unknown' else None,
+                    "device_type": r_type if r_type != "unknown" else None,
                     "alternate_ips": [],
                     "interface_map": interface_map,
                     "created_at": time.time(),
@@ -243,12 +288,19 @@ def do_discovery_job(job, db):
                     enqueue_discovery(str(new_id), depth + 1, auto_recursive, max_depth)
             else:
                 upd = {}
-                if "display_name" not in existing_by_ip or not existing_by_ip["display_name"]:
+                if (
+                    "display_name" not in existing_by_ip
+                    or not existing_by_ip["display_name"]
+                ):
                     upd["display_name"] = rname
                 if existing_by_ip.get("depth", 999) > depth + 1:
                     upd["depth"] = depth + 1
                     upd["parent"] = seed_ip
-                if (not existing_by_ip.get("device_type")) and r_type and r_type != 'unknown':
+                if (
+                    (not existing_by_ip.get("device_type"))
+                    and r_type
+                    and r_type != "unknown"
+                ):
                     upd["device_type"] = r_type
                 interface_map = existing_by_ip.get("interface_map", {})
                 if r_ip and link.get("remote_port"):
@@ -263,7 +315,10 @@ def do_discovery_job(job, db):
 
     except Exception as e:
         print("discovery error:", e)
-        db.devices.update_one({"_id": oid}, {"$set": {"status": "error", "error": str(e), "last_seen": time.time()}})
+        db.devices.update_one(
+            {"_id": oid},
+            {"$set": {"status": "error", "error": str(e), "last_seen": time.time()}},
+        )
         if conn:
             try:
                 conn.disconnect()

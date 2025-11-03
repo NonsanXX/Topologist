@@ -23,7 +23,9 @@ def resolve_device_credentials(oid: ObjectId):
                     username = identity.get("username")
                     password = identity.get("password")
                 else:
-                    raise HTTPException(400, "Device identity not found, but was linked")
+                    raise HTTPException(
+                        400, "Device identity not found, but was linked"
+                    )
             except Exception:
                 raise HTTPException(400, "Invalid identity_id format")
 
@@ -83,7 +85,7 @@ def add_device(payload: dict):
         "parent": payload.get("parent"),
         "device_type": device_type,
         "created_at": time.time(),
-        "last_seen": None
+        "last_seen": None,
     }
     old = db.devices.find_one({"host": host})
     if old:
@@ -114,7 +116,14 @@ def save_device_creds(device_id: str, payload: dict):
         raise HTTPException(400, "username/password required")
     db.devices.update_one(
         {"_id": oid},
-        {"$set": {"username": u, "password": p, "status": "ready", "last_seen": time.time()}}
+        {
+            "$set": {
+                "username": u,
+                "password": p,
+                "status": "ready",
+                "last_seen": time.time(),
+            }
+        },
     )
     return {"ok": True}
 
@@ -187,20 +196,22 @@ def get_device_interfaces(device_id: str):
 
     interfaces = []
     for iface, ips in sorted(iface_to_ips.items()):
-        interfaces.append({
-            "name": iface,
-            "ips": ips,
-            "disabled": iface in disabled,
-            "connected": iface in connected,
-            "can_disable": iface not in connected
-        })
+        interfaces.append(
+            {
+                "name": iface,
+                "ips": ips,
+                "disabled": iface in disabled,
+                "connected": iface in connected,
+                "can_disable": iface not in connected,
+            }
+        )
 
     return {
         "device_id": str(dev["_id"]),
         "host": dev.get("host") or "",
         "display_name": dev.get("display_name") or "",
         "interfaces": interfaces,
-        "disabled_interfaces": list(disabled)
+        "disabled_interfaces": list(disabled),
     }
 
 
@@ -226,17 +237,17 @@ def set_device_interface_state(device_id: str, payload: dict):
 
     connected = _collect_connected_interfaces(dev)
     if disable and interface_name in connected:
-        raise HTTPException(400, "cannot disable an interface that is currently connected")
+        raise HTTPException(
+            400, "cannot disable an interface that is currently connected"
+        )
 
     if disable:
         db.devices.update_one(
-            {"_id": oid},
-            {"$addToSet": {"disabled_interfaces": interface_name}}
+            {"_id": oid}, {"$addToSet": {"disabled_interfaces": interface_name}}
         )
     else:
         db.devices.update_one(
-            {"_id": oid},
-            {"$pull": {"disabled_interfaces": interface_name}}
+            {"_id": oid}, {"$pull": {"disabled_interfaces": interface_name}}
         )
 
     return get_device_interfaces(device_id)

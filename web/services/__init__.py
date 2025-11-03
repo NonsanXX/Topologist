@@ -18,7 +18,12 @@ from .devices import (
     resolve_device_credentials,
 )
 from .commands import run_device_command, get_command_job
-from .info import run_device_info, get_device_info_job, get_latest_device_info, INFO_COMMANDS
+from .info import (
+    run_device_info,
+    get_device_info_job,
+    get_latest_device_info,
+    INFO_COMMANDS,
+)
 from .topology import latest_topology, topology_graph, clear_topology
 
 __all__ = [

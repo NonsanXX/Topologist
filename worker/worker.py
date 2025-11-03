@@ -12,11 +12,13 @@ def consume():
     while True:
         try:
             # Connect with retry logic
-            conn = connect_to_rabbitmq(max_retries=0, initial_delay=2)  # Infinite retries
+            conn = connect_to_rabbitmq(
+                max_retries=0, initial_delay=2
+            )  # Infinite retries
             ch = conn.channel()
             ch.queue_declare(queue="discovery", durable=True)
             ch.queue_declare(queue="commands", durable=True)
-            
+
             def cb(ch, method, props, body):
                 job = json.loads(body)
                 job_type = job.get("type")
@@ -29,15 +31,17 @@ def consume():
                 else:
                     print(f"[Worker] Unknown job type: {job_type}")
                 ch.basic_ack(delivery_tag=method.delivery_tag)
-            
+
             ch.basic_consume(queue="discovery", on_message_callback=cb)
             ch.basic_consume(queue="commands", on_message_callback=cb)
             print(" [*] worker waiting ...")
             ch.start_consuming()
-            
-        except (pika.exceptions.AMQPConnectionError,
-                pika.exceptions.ConnectionClosedByBroker,
-                pika.exceptions.StreamLostError) as e:
+
+        except (
+            pika.exceptions.AMQPConnectionError,
+            pika.exceptions.ConnectionClosedByBroker,
+            pika.exceptions.StreamLostError,
+        ) as e:
             print(f"[RabbitMQ] Connection lost: {e}")
             print("[RabbitMQ] Reconnecting in 5 seconds...")
             time.sleep(5)

@@ -41,7 +41,7 @@ def add_identity(payload: dict):
         "username": username,
         "password": password,
         "is_default": False,
-        "created_at": time.time()
+        "created_at": time.time(),
     }
     oid = db.identities.insert_one(doc).inserted_id
     return {"_id": str(oid), "message": "identity created"}
@@ -91,7 +91,9 @@ def delete_identity(identity_id: str):
 
     count = db.devices.count_documents({"identity_id": identity_id})
     if count > 0:
-        raise HTTPException(400, f"Cannot delete: {count} device(s) are using this identity")
+        raise HTTPException(
+            400, f"Cannot delete: {count} device(s) are using this identity"
+        )
 
     db.identities.delete_one({"_id": oid})
     return {"deleted": True}

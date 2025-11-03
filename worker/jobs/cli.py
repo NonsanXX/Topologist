@@ -27,7 +27,14 @@ def do_cli_job(job, db):
     if not command or not command.strip():
         db.device_commands.update_one(
             {"_id": job_oid},
-            {"$set": {"status": "failed", "error": "command missing", "updated_at": time.time(), "completed_at": time.time()}}
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": "command missing",
+                    "updated_at": time.time(),
+                    "completed_at": time.time(),
+                }
+            },
         )
         print(f"[CLI] Job {job_id} missing command")
         return
@@ -37,7 +44,14 @@ def do_cli_job(job, db):
     except Exception:
         db.device_commands.update_one(
             {"_id": job_oid},
-            {"$set": {"status": "failed", "error": "invalid device id", "updated_at": time.time(), "completed_at": time.time()}}
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": "invalid device id",
+                    "updated_at": time.time(),
+                    "completed_at": time.time(),
+                }
+            },
         )
         print(f"[CLI] Job {job_id} invalid device id {device_id}")
         return
@@ -46,7 +60,14 @@ def do_cli_job(job, db):
     if not dev:
         db.device_commands.update_one(
             {"_id": job_oid},
-            {"$set": {"status": "failed", "error": "device not found", "updated_at": time.time(), "completed_at": time.time()}}
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": "device not found",
+                    "updated_at": time.time(),
+                    "completed_at": time.time(),
+                }
+            },
         )
         print(f"[CLI] Device {device_id} not found for job {job_id}")
         return
@@ -54,14 +75,27 @@ def do_cli_job(job, db):
     start_time = time.time()
     db.device_commands.update_one(
         {"_id": job_oid},
-        {"$set": {"status": "running", "started_at": start_time, "updated_at": start_time, "error": None}}
+        {
+            "$set": {
+                "status": "running",
+                "started_at": start_time,
+                "updated_at": start_time,
+                "error": None,
+            }
+        },
     )
 
     conn = None
     try:
         conn, used_proxy = establish_connection(dev, db)
 
-        is_config_cmd = bool(re.search(r'^(conf|hostname|int(erface)?|ip route|enable)', command.strip(), re.IGNORECASE))
+        is_config_cmd = bool(
+            re.search(
+                r"^(conf|hostname|int(erface)?|ip route|enable)",
+                command.strip(),
+                re.IGNORECASE,
+            )
+        )
         if is_config_cmd:
             commands = [line for line in command.splitlines() if line.strip()]
             commands = commands or [command.strip()]
@@ -73,25 +107,29 @@ def do_cli_job(job, db):
         finish_time = time.time()
         db.device_commands.update_one(
             {"_id": job_oid},
-            {"$set": {
-                "status": "succeeded",
-                "output": output,
-                "updated_at": finish_time,
-                "completed_at": finish_time,
-                "error": None,
-            }}
+            {
+                "$set": {
+                    "status": "succeeded",
+                    "output": output,
+                    "updated_at": finish_time,
+                    "completed_at": finish_time,
+                    "error": None,
+                }
+            },
         )
         print(f"[CLI] Job {job_id} completed")
     except Exception as e:
         finish_time = time.time()
         db.device_commands.update_one(
             {"_id": job_oid},
-            {"$set": {
-                "status": "failed",
-                "error": str(e),
-                "updated_at": finish_time,
-                "completed_at": finish_time,
-            }}
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": str(e),
+                    "updated_at": finish_time,
+                    "completed_at": finish_time,
+                }
+            },
         )
         print(f"[CLI] Job {job_id} failed: {e}")
     finally:

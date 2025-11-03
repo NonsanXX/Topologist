@@ -2,6 +2,7 @@ import re
 
 # ---- Device Type Classification Helpers ----
 
+
 def classify_from_cdp_caps(caps_text: str) -> str:
     """Map raw CDP/LLDP capability text (long words or single letters) to device_type.
 
@@ -15,7 +16,7 @@ def classify_from_cdp_caps(caps_text: str) -> str:
     """
     if not caps_text:
         return "unknown"
-    txt = caps_text.replace('(', ' ').replace(')', ' ').replace('/', ' ')
+    txt = caps_text.replace("(", " ").replace(")", " ").replace("/", " ")
     # Split by non-word boundaries except keep single letters
     tokens = re.split(r"[\s,]+", txt.strip())
     norm = set()
@@ -25,35 +26,47 @@ def classify_from_cdp_caps(caps_text: str) -> str:
             continue
         # Single-letter codes
         if len(t) == 1:
-            if t == 'r': norm.add('router')
-            elif t in ('b','s'): norm.add('switch')
-            elif t == 'h': norm.add('end')
-            elif t == 'w': norm.add('ap')
-            elif t == 'p': continue  # repeater ignore
+            if t == "r":
+                norm.add("router")
+            elif t in ("b", "s"):
+                norm.add("switch")
+            elif t == "h":
+                norm.add("end")
+            elif t == "w":
+                norm.add("ap")
+            elif t == "p":
+                continue  # repeater ignore
             continue
         # Word forms
-        if t.startswith('router'): norm.add('router')
-        elif t.startswith('switch'): norm.add('switch')
-        elif t == 'bridge': norm.add('switch')  # Only standalone "bridge", not "source-route-bridge"
-        elif t.startswith('host') or t.startswith('station'): norm.add('end')
-        elif t.startswith('wlan') or t.startswith('wireless'): norm.add('ap')
+        if t.startswith("router"):
+            norm.add("router")
+        elif t.startswith("switch"):
+            norm.add("switch")
+        elif t == "bridge":
+            norm.add("switch")  # Only standalone "bridge", not "source-route-bridge"
+        elif t.startswith("host") or t.startswith("station"):
+            norm.add("end")
+        elif t.startswith("wlan") or t.startswith("wireless"):
+            norm.add("ap")
     # Decision priority
-    if 'router' in norm and 'switch' in norm:
-        return 'layer3_switch'
-    if 'router' in norm:
-        return 'router'
-    if 'switch' in norm:
-        return 'switch'
-    if 'ap' in norm:
-        return 'ap'
-    if 'end' in norm:
-        return 'end'
-    return 'unknown'
+    if "router" in norm and "switch" in norm:
+        return "layer3_switch"
+    if "router" in norm:
+        return "router"
+    if "switch" in norm:
+        return "switch"
+    if "ap" in norm:
+        return "ap"
+    if "end" in norm:
+        return "end"
+    return "unknown"
+
 
 def classify_from_lldp_caps(sys_caps: str, enabled_caps: str) -> str:
     """Very lightweight LLDP classification (both strings optional)."""
     caps = (sys_caps or "") + " " + (enabled_caps or "")
     return classify_from_cdp_caps(caps)  # reuse logic
+
 
 _IF_PREFIX_MAP = [
     (re.compile(r"^(GigabitEthernet|GigEthernet|GigEth|Gi)(?=\d)", re.I), "Gi"),
@@ -64,6 +77,7 @@ _IF_PREFIX_MAP = [
     (re.compile(r"^(Loopback|Lo)(?=\d)", re.I), "Lo"),
     (re.compile(r"^(Vlan|Vl)(?=\d)", re.I), "Vl"),
 ]
+
 
 def normalize_if_name(name: str) -> str:
     """Normalize varied Cisco-like interface strings to short form.
@@ -85,8 +99,10 @@ def normalize_if_name(name: str) -> str:
             return pattern.sub(short, name, count=1)
     return name
 
+
 _IPV4 = r"([0-9]{1,3}(?:\.[0-9]{1,3}){3})"
 _IPV6 = r"([0-9A-Fa-f:]+)"
+
 
 def _find_mgmt_ip(block: str):
     """
@@ -117,6 +133,7 @@ def _find_mgmt_ip(block: str):
 
     return None
 
+
 def parse_lldp_cisco(text: str):
     """
     Return list of dict entries with keys:
@@ -128,23 +145,33 @@ def parse_lldp_cisco(text: str):
         if not b or not b.strip():
             continue
         local_if = re.search(r"Local Intf:\s*([\w\/\.]+)", b)
-        sysname  = re.search(r"System Name:\s*([^\r\n]+)", b)
+        sysname = re.search(r"System Name:\s*([^\r\n]+)", b)
         portdesc = re.search(r"Port Description:\s*([^\r\n]+)", b)
         sys_caps = re.search(r"System Capabilities:\s*([^\r\n]+)", b)
-        en_caps  = re.search(r"Enabled Capabilities:\s*([^\r\n]+)", b)
+        en_caps = re.search(r"Enabled Capabilities:\s*([^\r\n]+)", b)
         if local_if and sysname:
             mgmt_ip = _find_mgmt_ip(b)
-            dev_type = classify_from_lldp_caps(sys_caps.group(1) if sys_caps else '', en_caps.group(1) if en_caps else '')
-            if dev_type == 'unknown':
-                print(f"[LLDP] device_type unknown for neighbor '{sysname.group(1).strip()}' caps=({sys_caps.group(1).strip() if sys_caps else ''}) enabled=({en_caps.group(1).strip() if en_caps else ''})")
-            out.append({
-                "local_if": normalize_if_name(local_if.group(1).strip()),
-                "remote_sysname": sysname.group(1).strip(),
-                "remote_port": normalize_if_name(portdesc.group(1).strip()) if portdesc else "",
-                "remote_mgmt_ip": mgmt_ip,
-                "device_type": dev_type
-            })
+            dev_type = classify_from_lldp_caps(
+                sys_caps.group(1) if sys_caps else "",
+                en_caps.group(1) if en_caps else "",
+            )
+            if dev_type == "unknown":
+                print(
+                    f"[LLDP] device_type unknown for neighbor '{sysname.group(1).strip()}' caps=({sys_caps.group(1).strip() if sys_caps else ''}) enabled=({en_caps.group(1).strip() if en_caps else ''})"
+                )
+            out.append(
+                {
+                    "local_if": normalize_if_name(local_if.group(1).strip()),
+                    "remote_sysname": sysname.group(1).strip(),
+                    "remote_port": (
+                        normalize_if_name(portdesc.group(1).strip()) if portdesc else ""
+                    ),
+                    "remote_mgmt_ip": mgmt_ip,
+                    "device_type": dev_type,
+                }
+            )
     return out
+
 
 def parse_cdp_cisco(text: str):
     """
@@ -159,18 +186,24 @@ def parse_cdp_cisco(text: str):
             continue
         sysname = lines[0].strip()
         local_if = re.search(r"Interface:\s*([\w\/\.]+),", b)
-        portid   = re.search(r"Port ID \(outgoing port\):\s*([^\r\n]+)", b)
-        mgmt_ip  = re.search(rf"IP address:\s*{_IPV4}", b, re.I)
-        caps     = re.search(r"Capabilities:\s*([^\r\n]+)", b, re.I)
+        portid = re.search(r"Port ID \(outgoing port\):\s*([^\r\n]+)", b)
+        mgmt_ip = re.search(rf"IP address:\s*{_IPV4}", b, re.I)
+        caps = re.search(r"Capabilities:\s*([^\r\n]+)", b, re.I)
         if local_if and sysname:
-            dev_type = classify_from_cdp_caps(caps.group(1) if caps else '')
-            if dev_type == 'unknown':
-                print(f"[CDP] device_type unknown for neighbor '{sysname}' caps=({caps.group(1).strip() if caps else ''})")
-            out.append({
-                "local_if": normalize_if_name(local_if.group(1).strip()),
-                "remote_sysname": sysname,
-                "remote_port": normalize_if_name(portid.group(1).strip()) if portid else "",
-                "remote_mgmt_ip": (mgmt_ip.group(1).strip() if mgmt_ip else None),
-                "device_type": dev_type
-            })
+            dev_type = classify_from_cdp_caps(caps.group(1) if caps else "")
+            if dev_type == "unknown":
+                print(
+                    f"[CDP] device_type unknown for neighbor '{sysname}' caps=({caps.group(1).strip() if caps else ''})"
+                )
+            out.append(
+                {
+                    "local_if": normalize_if_name(local_if.group(1).strip()),
+                    "remote_sysname": sysname,
+                    "remote_port": (
+                        normalize_if_name(portid.group(1).strip()) if portid else ""
+                    ),
+                    "remote_mgmt_ip": (mgmt_ip.group(1).strip() if mgmt_ip else None),
+                    "device_type": dev_type,
+                }
+            )
     return out

@@ -26,8 +26,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 def index():
     return FileResponse("static/index.html")
 
+
 @app.get("/info")
 def info_page():
     return FileResponse("static/info.html")
+
+
 for router in api_routers:
     app.include_router(router)
