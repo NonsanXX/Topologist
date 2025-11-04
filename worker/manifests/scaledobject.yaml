@@ -1,0 +1,22 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: topologist-scaler
+  namespace: topologist
+spec:
+  scaleTargetRef:
+    name: topologist-worker
+  pollingInterval: 15
+  cooldownPeriod: 120
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: commands
+        mode: QueueLength
+        value: "10"
+        protocol: auto
+        hostFromEnv: RABBITMQ_URI
+        usernameFromEnv: RABBITMQ_DEFAULT_USER
+        passwordFromEnv: RABBITMQ_DEFAULT_PASS

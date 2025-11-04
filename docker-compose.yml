@@ -55,7 +55,7 @@ services:
       - SCHEDULER_URL=http://scheduler:5001
     networks:
       - app-net
-    ports: [ "8000:8000" ]
+    ports: [ "8080:8080" ]
     depends_on: [ mongo, scheduler ]
 
 volumes:

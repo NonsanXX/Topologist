@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: topologist-web
+  namespace: devops-tools
+spec:
+  project: ipa2025
+  source:
+    repoURL: 'https://github.com/NonsanXX/Topologist'
+    targetRevision: HEAD
+    path: web/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: topologist
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

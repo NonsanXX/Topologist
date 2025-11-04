@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: topologist-worker
+  namespace: topologist
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: topologist-worker
+  template:
+    metadata:
+      labels:
+        app: topologist-worker
+    spec:
+      containers:
+        - name: topologist-worker
+          image: nonsanxx/topologist-worker:latest
+          envFrom:
+            - secretRef:
+                name: "env"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      restartPolicy: Always

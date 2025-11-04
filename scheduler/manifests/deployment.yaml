@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: topologist-scheduler
+  namespace: topologist
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: topologist-scheduler
+  template:
+    metadata:
+      labels:
+        app: topologist-scheduler
+    spec:
+      containers:
+        - name: topologist-scheduler
+          image: nonsan/topologist-scheduler:latest
+          envFrom:
+            - secretRef:
+                name: "env"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      restartPolicy: Always
