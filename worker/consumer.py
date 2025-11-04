@@ -34,7 +34,7 @@ def connect_to_rabbitmq(max_retries=10, initial_delay=1):
                     blocked_connection_timeout=300,
                 )
             )
-            print(f"[RabbitMQ] Connected successfully!")
+            print("[RabbitMQ] Connected successfully!")
             return conn
         except (
             pika.exceptions.AMQPConnectionError,

@@ -151,18 +151,23 @@ def parse_lldp_cisco(text: str):
         en_caps = re.search(r"Enabled Capabilities:\s*([^\r\n]+)", b)
         if local_if and sysname:
             mgmt_ip = _find_mgmt_ip(b)
+            sys_caps_val = sys_caps.group(1).strip() if sys_caps else ""
+            enabled_caps_val = en_caps.group(1).strip() if en_caps else ""
+            neighbor_name = sysname.group(1).strip()
             dev_type = classify_from_lldp_caps(
-                sys_caps.group(1) if sys_caps else "",
-                en_caps.group(1) if en_caps else "",
+                sys_caps_val,
+                enabled_caps_val,
             )
             if dev_type == "unknown":
                 print(
-                    f"[LLDP] device_type unknown for neighbor '{sysname.group(1).strip()}' caps=({sys_caps.group(1).strip() if sys_caps else ''}) enabled=({en_caps.group(1).strip() if en_caps else ''})"
+                    "[LLDP] device_type unknown for neighbor "
+                    f"'{neighbor_name}' caps=({sys_caps_val}) "
+                    f"enabled=({enabled_caps_val})"
                 )
             out.append(
                 {
                     "local_if": normalize_if_name(local_if.group(1).strip()),
-                    "remote_sysname": sysname.group(1).strip(),
+                    "remote_sysname": neighbor_name,
                     "remote_port": (
                         normalize_if_name(portdesc.group(1).strip()) if portdesc else ""
                     ),
@@ -190,10 +195,12 @@ def parse_cdp_cisco(text: str):
         mgmt_ip = re.search(rf"IP address:\s*{_IPV4}", b, re.I)
         caps = re.search(r"Capabilities:\s*([^\r\n]+)", b, re.I)
         if local_if and sysname:
-            dev_type = classify_from_cdp_caps(caps.group(1) if caps else "")
+            caps_value = caps.group(1).strip() if caps else ""
+            dev_type = classify_from_cdp_caps(caps_value)
             if dev_type == "unknown":
                 print(
-                    f"[CDP] device_type unknown for neighbor '{sysname}' caps=({caps.group(1).strip() if caps else ''})"
+                    "[CDP] device_type unknown for neighbor "
+                    f"'{sysname}' caps=({caps_value})"
                 )
             out.append(
                 {

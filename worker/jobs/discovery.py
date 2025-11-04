@@ -170,8 +170,8 @@ def do_discovery_job(job, db):
                     "show lldp neighbors detail", expect_string=r"#"
                 )
             links = parse_lldp_cisco(out)
-            for l in links:
-                l["device_type"] = None
+            for link_info in links:
+                link_info["device_type"] = None
             used_proto = "lldp_fallback"
 
         if used_proxy:
@@ -192,7 +192,8 @@ def do_discovery_job(job, db):
 
         conn_method = "proxy" if used_proxy else "direct"
         print(
-            f"[DISCOVERY] seed={seed_ip} method={conn_method} protocol={used_proto} neighbors={len(links)}"
+            f"[DISCOVERY] seed={seed_ip} method={conn_method} "
+            f"protocol={used_proto} neighbors={len(links)}"
         )
 
         default_identity = db.identities.find_one({"is_default": True})
@@ -209,8 +210,11 @@ def do_discovery_job(job, db):
             r_ip = link.get("remote_mgmt_ip")
             rname = link.get("remote_sysname")
             r_type = link.get("device_type")
+            local_if = link.get("local_if")
+            remote_port = link.get("remote_port")
             print(
-                f"  neighbor name={rname} ip={r_ip or '-'} type={r_type} local_if={link.get('local_if')} remote_port={link.get('remote_port')}"
+                f"  neighbor name={rname} ip={r_ip or '-'} type={r_type} "
+                f"local_if={local_if} remote_port={remote_port}"
             )
             if not r_ip:
                 existing = db.devices.find_one({"display_name": rname, "host": ""})

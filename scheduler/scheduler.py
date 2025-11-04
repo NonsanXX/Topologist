@@ -1,5 +1,6 @@
 import time
 from fastapi import FastAPI, Body, HTTPException
+from bson.errors import InvalidId
 from bson.objectid import ObjectId
 
 from database import db
@@ -18,7 +19,7 @@ def discover(payload: dict = Body(...)):
     if payload.get("device_id"):
         try:
             oid = ObjectId(payload["device_id"])
-        except:
+        except InvalidId:
             raise HTTPException(400, "invalid device_id")
         dev = db.devices.find_one({"_id": oid})
         if not dev:

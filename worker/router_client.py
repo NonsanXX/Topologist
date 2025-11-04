@@ -1,14 +1,13 @@
 import time
 import socket
 from netmiko import ConnectHandler
-from netmiko.exceptions import NetmikoTimeoutException, NetmikoAuthenticationException
 
 
 def get_reachable_devices(db):
-    """Get list of devices that were successfully connected to (status=ready or scanning).
+    """Return devices reachable with status ready or scanning.
 
     Returns:
-        list: List of device documents that can potentially be used as jump hosts
+        list: Device documents that can be used as jump hosts.
     """
     return list(
         db.devices.find(
@@ -21,13 +20,12 @@ def get_reachable_devices(db):
 
 
 def get_directly_reachable_devices(db):
-    """Get list of devices that can be reached directly from this PC.
+    """Return IPs that pass a TCP reachability check from this host.
 
-    Tests actual TCP connectivity to determine reachability instead of relying on depth.
     Uses cached results to avoid repeated connection attempts.
 
     Returns:
-        set: Set of IPs that are directly reachable
+        set: IPs that are directly reachable.
     """
     # Try to use cached results first (with 5 minute expiry)
     cache = db.reachability_cache.find_one({"_id": "direct_reachable"})
@@ -47,7 +45,10 @@ def get_directly_reachable_devices(db):
         )
     )
 
-    print(f"[REACHABILITY] Testing {len(devices)} devices for direct connectivity...")
+    device_count = len(devices)
+    print(
+        f"[REACHABILITY] Testing {device_count} devices for direct connectivity..."
+    )
 
     for dev in devices:
         host = dev.get("host")
@@ -83,17 +84,16 @@ def get_directly_reachable_devices(db):
 def find_path_to_device(target_ip, reachable_devices, db):
     """Find a path to reach target_ip through intermediate jump hosts.
 
-    Uses breadth-first search through the topology graph to find shortest path.
-    Tests actual TCP connectivity to determine which devices can be used as starting points.
+    Uses breadth-first search through the topology graph to find a shortest path
+    while confirming starting points with direct TCP connectivity tests.
 
     Args:
-        target_ip: IP address of target device to reach
-        reachable_devices: List of devices that we can potentially use as jump hosts
-        db: Database connection
+        target_ip: IP address of target device to reach.
+        reachable_devices: Devices we can potentially use as jump hosts.
+        db: Database connection.
 
     Returns:
-        list: List of device IPs forming a path from a directly reachable device to target,
-              or None if no path found
+        list: Device IPs forming a path to the target, or None if not found.
     """
     if not reachable_devices:
         return None
@@ -120,7 +120,8 @@ def find_path_to_device(target_ip, reachable_devices, db):
         return None
 
     print(
-        f"[PATH FINDING] Starting BFS from directly reachable devices: {directly_reachable_ips}"
+        "[PATH FINDING] Starting BFS from directly reachable devices: "
+        f"{directly_reachable_ips}"
     )
 
     # Try to find shortest path from any directly reachable device
@@ -151,8 +152,10 @@ def find_path_to_device(target_ip, reachable_devices, db):
                     # Found a path! Check if it's better than current best
                     if best_path is None or len(new_path) < len(best_path):
                         best_path = new_path
+                        path_str = " -> ".join(new_path)
                         print(
-                            f"[PATH FINDING] Found path of length {len(new_path)}: {' -> '.join(new_path)}"
+                            "[PATH FINDING] Found path of length "
+                            f"{len(new_path)}: {path_str}"
                         )
                     break  # Found path from this starting point
 
@@ -165,17 +168,18 @@ def connect_with_jump_hosts(target_device, jump_path, db):
     """Connect to a device through a chain of SSH jump hosts.
 
     Args:
-        target_device: Device document for the target to connect to
-        jump_path: List of IP addresses forming path [jump1, jump2, ..., target]
-        db: Database connection
+        target_device: Device document for the target to connect to.
+        jump_path: IPs forming path [jump1, jump2, ..., target].
+        db: Database connection.
 
     Returns:
-        ConnectHandler: Connected Netmiko session, or None if connection fails
+        ConnectHandler: Connected Netmiko session, or None if connection fails.
     """
     if not jump_path or len(jump_path) < 2:
         return None
 
-    print(f"[SSH CHAIN] Attempting connection via path: {' -> '.join(jump_path)}")
+    path_display = " -> ".join(jump_path)
+    print(f"[SSH CHAIN] Attempting connection via path: {path_display}")
 
     try:
         # Connect to the first jump host (directly reachable)
@@ -219,7 +223,8 @@ def connect_with_jump_hosts(target_device, jump_path, db):
                     or not next_device.get("password")
                 ):
                     print(
-                        f"[SSH CHAIN] Missing credentials for intermediate hop {next_ip}"
+                        "[SSH CHAIN] Missing credentials for intermediate hop "
+                        f"{next_ip}"
                     )
                     conn.disconnect()
                     return None
@@ -228,11 +233,14 @@ def connect_with_jump_hosts(target_device, jump_path, db):
 
             # SSH to the next hop
             ssh_cmd = f"ssh -l {next_username} {next_ip}"
-            print(f"[SSH CHAIN] Hop {hop_index}: {jump_path[hop_index-1]} -> {next_ip}")
+            prev_ip = jump_path[hop_index - 1]
+            print(f"[SSH CHAIN] Hop {hop_index}: {prev_ip} -> {next_ip}")
             print(f"[SSH CHAIN] Sending: {ssh_cmd}")
 
             # Send SSH command and wait for output
-            output = conn.send_command_timing(ssh_cmd, delay_factor=4, read_timeout=20)
+            output = conn.send_command_timing(
+                ssh_cmd, delay_factor=4, read_timeout=20
+            )
             print(f"[SSH CHAIN] Initial output: {repr(output[:300])}")
 
             # Handle various prompts
@@ -243,9 +251,9 @@ def connect_with_jump_hosts(target_device, jump_path, db):
             while attempt < max_attempts:
                 attempt += 1
 
-                # Check for password prompt (case insensitive) - check this FIRST before anything else
+                # Check for password prompt first (case insensitive)
                 if "password:" in output.lower():
-                    print(f"[SSH CHAIN] Password prompt detected, sending password")
+                    print("[SSH CHAIN] Password prompt detected, sending password")
                     output = conn.send_command_timing(
                         next_password, delay_factor=3, read_timeout=15
                     )
@@ -257,7 +265,7 @@ def connect_with_jump_hosts(target_device, jump_path, db):
                     "(yes/no" in output.lower()
                     or "continue connecting" in output.lower()
                 ):
-                    print(f"[SSH CHAIN] SSH key prompt detected, sending 'yes'")
+                    print("[SSH CHAIN] SSH key prompt detected, sending 'yes'")
                     output = conn.send_command_timing(
                         "yes", delay_factor=2, read_timeout=10
                     )
@@ -281,7 +289,7 @@ def connect_with_jump_hosts(target_device, jump_path, db):
 
                 # If output is empty or no clear state, wait and read more
                 if not output or len(output.strip()) == 0:
-                    print(f"[SSH CHAIN] Empty output, waiting for data...")
+                    print("[SSH CHAIN] Empty output, waiting for data...")
                     time.sleep(2)
                     output = conn.send_command_timing(
                         "", delay_factor=2, read_timeout=10
@@ -289,9 +297,7 @@ def connect_with_jump_hosts(target_device, jump_path, db):
                     print(f"[SSH CHAIN] After wait: {repr(output[:300])}")
                 else:
                     # Got some output but no password/prompt yet, keep waiting
-                    print(
-                        f"[SSH CHAIN] Waiting for password prompt or device prompt..."
-                    )
+                    print("[SSH CHAIN] Waiting for password prompt or device prompt...")
                     time.sleep(1)
                     output += conn.send_command_timing(
                         "", delay_factor=1, read_timeout=10
@@ -300,7 +306,8 @@ def connect_with_jump_hosts(target_device, jump_path, db):
 
             if not connected:
                 print(
-                    f"[SSH CHAIN] Failed to connect to {next_ip} after {max_attempts} attempts"
+                    "[SSH CHAIN] Failed to connect to "
+                    f"{next_ip} after {max_attempts} attempts"
                 )
                 print(f"[SSH CHAIN] Final output: {repr(output)}")
                 conn.disconnect()
@@ -308,8 +315,10 @@ def connect_with_jump_hosts(target_device, jump_path, db):
 
         # Successfully connected through all hops to target
         target_ip = jump_path[-1]
+        path_display = " -> ".join(jump_path)
         print(
-            f"[SSH CHAIN] Successfully reached target {target_ip} through path: {' -> '.join(jump_path)}"
+            "[SSH CHAIN] Successfully reached target "
+            f"{target_ip} through path: {path_display}"
         )
 
         # Mark this as a proxy connection
