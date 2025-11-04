@@ -1,0 +1,74 @@
+# CircleCI configuration file
+version: 2.1
+
+# 1. Use the official CircleCI Docker orb for Docker commands
+orbs:
+  docker: circleci/docker@2.6.0
+
+jobs:
+  # 2. Define the single job, named 'ci'
+  ci:
+    # 3. Specify the primary container image (executor)
+    # We use a CircleCI convenience image that includes Python 3.12.3
+    docker:
+      - image: cimg/python:3.12.3
+    
+    steps:
+      # 4. Check out the source code
+      - checkout
+
+      # 5. Run Python Linting and Formatting
+      - run:
+          name: Install Lint & Format Tools
+          command: |
+            pip install flake8 black
+      - run:
+          name: Run flake8 (Lint)
+          command: flake8 .
+      - run:
+          name: Check code format with black
+          command: black --check .
+
+      # 6. Set up the remote Docker engine
+      - setup_remote_docker:
+          version: 20.10.24 # You can specify a Docker version
+
+      # 7. Log in to Docker Hub
+      # This step uses the 'docker/check' command from the orb.
+      # It automatically uses the environment variables $DOCKERHUB_USERNAME and $DOCKERHUB_TOKEN.
+      # You must set these in your CircleCI Project Settings.
+      - docker/check:
+          docker-username: DOCKERHUB_USERNAME
+          docker-password: DOCKERHUB_TOKEN
+
+      # 8. Build and Push the three Docker images
+      # We use the 'docker/build-and-push' command from the orb.
+      # It builds the image and pushes it if the 'docker/check' (login) step was successful.
+      - docker/build-and-push:
+          image: nonsanxx/worker
+          path: ./worker
+          tag: latest
+      
+      - docker/build-and-push:
+          image: nonsanxx/scheduler
+          path: ./scheduler
+          tag: latest
+      
+      - docker/build-and-push:
+          image: nonsanxx/web
+          path: ./web
+          tag: latest
+
+# 9. Define the workflow to orchestrate the 'ci' job
+workflows:
+  version: 2
+  build_and_push:
+    jobs:
+      - ci:
+          # This filter block makes the 'ci' job run ONLY on
+          # pushes and pull requests to the 'main' branch,
+          # just like your GitHub Actions file.
+          filters:
+            branches:
+              only:
+                - main
