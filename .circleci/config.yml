@@ -42,21 +42,33 @@ jobs:
           docker-password: DOCKERHUB_TOKEN
 
       # 8. Build and Push the three Docker images
-      # We use the 'docker/build-and-push' command from the orb.
-      # It builds the image and pushes it if the 'docker/check' (login) step was successful.
-      - docker/build-and-push:
-          image: nonsanxx/worker
+      # CORRECTION: Replaced 'docker/build-and-push' with separate 'docker/build' and 'docker/push' commands.
+      
+      # Worker Image
+      - docker/build:
+          image: nonsanxx/topologist/worker
           path: ./worker
           tag: latest
-      
-      - docker/build-and-push:
-          image: nonsanxx/scheduler
+      - docker/push:
+          image: nonsanxx/topologist/worker
+          tag: latest
+
+      # Scheduler Image
+      - docker/build:
+          image: nonsanxx/topologist/scheduler
           path: ./scheduler
           tag: latest
+      - docker/push:
+          image: nonsanxx/topologist/scheduler
+          tag: latest
       
-      - docker/build-and-push:
-          image: nonsanxx/web
+      # Web Image
+      - docker/build:
+          image: nonsanxx/topologist/web
           path: ./web
+          tag: latest
+      - docker/push:
+          image: nonsanxx/topologist/web
           tag: latest
 
 # 9. Define the workflow to orchestrate the 'ci' job
@@ -72,3 +84,4 @@ workflows:
             branches:
               only:
                 - main
+
