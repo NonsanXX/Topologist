@@ -28,27 +28,27 @@ jobs:
       - docker/check
 
       - docker/build:
-          image: nonsanxx/topologist/worker
+          image: nonsanxx/topologist-worker
           path: ./worker
           tag: latest
       - docker/push:
-          image: nonsanxx/topologist/worker
+          image: nonsanxx/topologist-worker
           tag: latest
 
       - docker/build:
-          image: nonsanxx/topologist/scheduler
+          image: nonsanxx/topologist-scheduler
           path: ./scheduler
           tag: latest
       - docker/push:
-          image: nonsanxx/topologist/scheduler
+          image: nonsanxx/topologist-scheduler
           tag: latest
       
       - docker/build:
-          image: nonsanxx/topologist/web
+          image: nonsanxx/topologist-web
           path: ./web
           tag: latest
       - docker/push:
-          image: nonsanxx/topologist/web
+          image: nonsanxx/topologist-web
           tag: latest
 
 workflows:
