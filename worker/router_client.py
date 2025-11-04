@@ -46,9 +46,7 @@ def get_directly_reachable_devices(db):
     )
 
     device_count = len(devices)
-    print(
-        f"[REACHABILITY] Testing {device_count} devices for direct connectivity..."
-    )
+    print(f"[REACHABILITY] Testing {device_count} devices for direct connectivity...")
 
     for dev in devices:
         host = dev.get("host")
@@ -238,9 +236,7 @@ def connect_with_jump_hosts(target_device, jump_path, db):
             print(f"[SSH CHAIN] Sending: {ssh_cmd}")
 
             # Send SSH command and wait for output
-            output = conn.send_command_timing(
-                ssh_cmd, delay_factor=4, read_timeout=20
-            )
+            output = conn.send_command_timing(ssh_cmd, delay_factor=4, read_timeout=20)
             print(f"[SSH CHAIN] Initial output: {repr(output[:300])}")
 
             # Handle various prompts
