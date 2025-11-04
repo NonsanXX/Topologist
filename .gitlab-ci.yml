@@ -1,0 +1,52 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+stages:
+  - lint
+  - docker
+
+# Lint + Format check (Python 3.12)
+lint:
+  image: python:3.12
+  stage: lint
+  script:
+    - pip install --no-cache-dir flake8 black
+    - flake8 .
+    - black --check .
+  rules:
+    - if: $CI_COMMIT_BRANCH    # รันบนทุก branch ที่มีการ push
+  cache:
+    key: python-deps
+    paths: [ .cache/pip ]
+
+# Build & Push 3 Docker images (Docker-in-Docker)
+docker_build_push:
+  image: docker:27.0.0
+  stage: docker
+  services:
+    - name: docker:27.0.0-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""         # ปิด TLS สำหรับ dind
+    DOCKER_BUILDKIT: "1"           # เร่ง build และ cache ดีขึ้น
+  script:
+    - echo "Login to Docker Hub"
+    - docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_TOKEN"
+
+    - echo "Build images"
+    - docker build -t "$DOCKERHUB_USERNAME/topologist/worker:latest" ./worker
+    - docker build -t "$DOCKERHUB_USERNAME/topologist/scheduler:latest" ./scheduler
+    - docker build -t "$DOCKERHUB_USERNAME/topologist/web:latest" ./web
+
+    - echo "Push images"
+    - docker push "$DOCKERHUB_USERNAME/topologist/worker:latest"
+    - docker push "$DOCKERHUB_USERNAME/topologist/scheduler:latest"
+    - docker push "$DOCKERHUB_USERNAME/topologist/web:latest"
+  needs: ["lint"]                 # ให้ผ่าน lint ก่อนค่อย build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"      # รันบนทุก branch
+      when: on_success
