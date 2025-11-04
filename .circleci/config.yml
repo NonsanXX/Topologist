@@ -29,7 +29,8 @@ jobs:
 
       - docker/build:
           image: nonsanxx/topologist-worker
-          path: ./worker
+          path: .
+          dockerfile: ./worker/Dockerfile
           tag: latest
       - docker/push:
           image: nonsanxx/topologist-worker
@@ -37,7 +38,8 @@ jobs:
 
       - docker/build:
           image: nonsanxx/topologist-scheduler
-          path: ./scheduler
+          path: .
+          dockerfile: ./scheduler/Dockerfile
           tag: latest
       - docker/push:
           image: nonsanxx/topologist-scheduler
@@ -45,7 +47,8 @@ jobs:
       
       - docker/build:
           image: nonsanxx/topologist-web
-          path: ./web
+          path: .
+          dockerfile: ./web/Dockerfile
           tag: latest
       - docker/push:
           image: nonsanxx/topologist-web

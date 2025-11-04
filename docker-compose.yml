@@ -20,7 +20,9 @@ services:
     env_file: .env
 
   scheduler:
-    build: ./scheduler
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
     env_file: .env
     environment:
       - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
@@ -31,7 +33,9 @@ services:
     ports: [ "5001:5001" ]
 
   worker:
-    build: ./worker
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
     env_file: .env
     environment:
       - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
@@ -41,7 +45,9 @@ services:
     depends_on: [ rabbitmq, mongo ]
 
   web:
-    build: ./web
+    build:
+      context: .
+      dockerfile: web/Dockerfile
     env_file: .env
     environment:
       - MONGO_URI=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_HOST}:27017
