@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: topologist-scheduler
-          image: nonsan/topologist-scheduler:latest
+          image: nonsanxx/topologist-scheduler:latest
           envFrom:
             - secretRef:
                 name: "env"
