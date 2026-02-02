@@ -145,36 +145,75 @@ def parse_lldp_cisco(text: str):
         if not b or not b.strip():
             continue
         local_if = re.search(r"Local Intf:\s*([\w\/\.]+)", b)
+        if not local_if:
+            continue  # Must have local interface
+
+        # Try System Name first, fall back to Chassis id
         sysname = re.search(r"System Name:\s*([^\r\n]+)", b)
+        chassis_id = re.search(r"Chassis id:\s*([^\r\n]+)", b)
+
+        # Determine the neighbor identifier
+        neighbor_name = None
+        if sysname:
+            val = sysname.group(1).strip()
+            # Filter out "- not advertised" style values
+            if val and not val.startswith("- not"):
+                neighbor_name = val
+        if not neighbor_name and chassis_id:
+            val = chassis_id.group(1).strip()
+            if val and not val.startswith("- not"):
+                neighbor_name = val
+
+        if not neighbor_name:
+            continue  # Skip if we can't identify the neighbor
+
         portdesc = re.search(r"Port Description:\s*([^\r\n]+)", b)
+        port_id = re.search(r"Port id:\s*([^\r\n]+)", b)
         sys_caps = re.search(r"System Capabilities:\s*([^\r\n]+)", b)
         en_caps = re.search(r"Enabled Capabilities:\s*([^\r\n]+)", b)
-        if local_if and sysname:
-            mgmt_ip = _find_mgmt_ip(b)
-            sys_caps_val = sys_caps.group(1).strip() if sys_caps else ""
-            enabled_caps_val = en_caps.group(1).strip() if en_caps else ""
-            neighbor_name = sysname.group(1).strip()
-            dev_type = classify_from_lldp_caps(
-                sys_caps_val,
-                enabled_caps_val,
+
+        mgmt_ip = _find_mgmt_ip(b)
+
+        # Get capabilities, filter "- not advertised"
+        sys_caps_val = ""
+        if sys_caps:
+            val = sys_caps.group(1).strip()
+            if not val.startswith("- not"):
+                sys_caps_val = val
+        enabled_caps_val = ""
+        if en_caps:
+            val = en_caps.group(1).strip()
+            if not val.startswith("- not"):
+                enabled_caps_val = val
+
+        dev_type = classify_from_lldp_caps(sys_caps_val, enabled_caps_val)
+        if dev_type == "unknown" and sys_caps_val:
+            print(
+                "[LLDP] device_type unknown for neighbor "
+                f"'{neighbor_name}' caps=({sys_caps_val}) "
+                f"enabled=({enabled_caps_val})"
             )
-            if dev_type == "unknown":
-                print(
-                    "[LLDP] device_type unknown for neighbor "
-                    f"'{neighbor_name}' caps=({sys_caps_val}) "
-                    f"enabled=({enabled_caps_val})"
-                )
-            out.append(
-                {
-                    "local_if": normalize_if_name(local_if.group(1).strip()),
-                    "remote_sysname": neighbor_name,
-                    "remote_port": (
-                        normalize_if_name(portdesc.group(1).strip()) if portdesc else ""
-                    ),
-                    "remote_mgmt_ip": mgmt_ip,
-                    "device_type": dev_type,
-                }
-            )
+
+        # Get remote port - prefer Port Description, fall back to Port id
+        remote_port = ""
+        if portdesc:
+            val = portdesc.group(1).strip()
+            if val and not val.startswith("- not"):
+                remote_port = normalize_if_name(val)
+        if not remote_port and port_id:
+            val = port_id.group(1).strip()
+            if val and not val.startswith("- not"):
+                remote_port = normalize_if_name(val)
+
+        out.append(
+            {
+                "local_if": normalize_if_name(local_if.group(1).strip()),
+                "remote_sysname": neighbor_name,
+                "remote_port": remote_port,
+                "remote_mgmt_ip": mgmt_ip,
+                "device_type": dev_type,
+            }
+        )
     return out
 
 
