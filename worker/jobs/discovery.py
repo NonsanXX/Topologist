@@ -66,6 +66,20 @@ def upsert_graph(seed_ip, links, db):
                 remote_id = device_by_name["host"]
             else:
                 remote_id = r_ip
+            # Bug 3 fix: Clean up ghost nodes when device has both IP and name
+            if r_name:
+                name_node_id = f"name:{r_name}"
+                # Move edges from name-based node to IP-based node
+                db.graph_links.update_many(
+                    {"a": name_node_id},
+                    {"$set": {"a": remote_id}}
+                )
+                db.graph_links.update_many(
+                    {"b": name_node_id},
+                    {"$set": {"b": remote_id}}
+                )
+                # Remove the ghost node
+                db.graph_nodes.delete_one({"_id": name_node_id})
         elif r_name:
             remote_id = f"name:{r_name}"
         else:
@@ -90,9 +104,15 @@ def upsert_graph(seed_ip, links, db):
         )
 
         a, b = sorted([seed_ip, remote_id])
-        if_a = link.get("local_if") if a == seed_ip else link.get("remote_port")
-        if_b = link.get("remote_port") if b == remote_id else link.get("local_if")
-        edge_id = f"{a}|{b}"
+        # Bug 1 fix: Correct interface assignment after sorting
+        if a == seed_ip:
+            if_a = link.get("local_if")
+            if_b = link.get("remote_port")
+        else:
+            if_a = link.get("remote_port")
+            if_b = link.get("local_if")
+        # Bug 2 fix: Include interfaces in edge ID to support parallel links
+        edge_id = f"{a}|{b}|{if_a or ''}|{if_b or ''}"
         db.graph_links.update_one(
             {"_id": edge_id},
             {
@@ -150,29 +170,38 @@ def do_discovery_job(job, db):
 
         conn, used_proxy = establish_connection(dev, db)
 
+        # Query CDP neighbors
         if used_proxy:
-            out = conn.send_command_timing(
+            cdp_out = conn.send_command_timing(
                 "show cdp neighbors detail", delay_factor=4, read_timeout=30
             )
         else:
-            out = conn.send_command("show cdp neighbors detail", expect_string=r"#")
+            cdp_out = conn.send_command("show cdp neighbors detail", expect_string=r"#")
+        cdp_links = parse_cdp_cisco(cdp_out)
 
-        links = parse_cdp_cisco(out)
-        used_proto = "cdp"
+        # Query LLDP neighbors
+        if used_proxy:
+            lldp_out = conn.send_command_timing(
+                "show lldp neighbors detail", delay_factor=4, read_timeout=30
+            )
+        else:
+            lldp_out = conn.send_command(
+                "show lldp neighbors detail", expect_string=r"#"
+            )
+        lldp_links = parse_lldp_cisco(lldp_out)
 
-        if not links:
-            if used_proxy:
-                out = conn.send_command_timing(
-                    "show lldp neighbors detail", delay_factor=4, read_timeout=30
-                )
-            else:
-                out = conn.send_command(
-                    "show lldp neighbors detail", expect_string=r"#"
-                )
-            links = parse_lldp_cisco(out)
-            for link_info in links:
-                link_info["device_type"] = None
-            used_proto = "lldp_fallback"
+        # Merge CDP and LLDP results, preferring CDP data when both exist
+        # Key by (local_if, remote_sysname) to deduplicate
+        links_map = {}
+        for link in lldp_links:
+            key = (link.get("local_if"), link.get("remote_sysname"))
+            links_map[key] = link
+        for link in cdp_links:
+            key = (link.get("local_if"), link.get("remote_sysname"))
+            links_map[key] = link  # CDP overwrites LLDP for same neighbor
+
+        links = list(links_map.values())
+        used_proto = f"cdp({len(cdp_links)})+lldp({len(lldp_links)})"
 
         if used_proxy:
             brief = conn.send_command_timing(

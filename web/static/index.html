@@ -5,82 +5,136 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Topologist - Network Topology Discovery</title>
-  
+
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@100;200;300;400;500;600;700&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@100;200;300;400;500;600;700&display=swap"
+    rel="stylesheet">
+
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
   <style>
     .modal-backdrop {
-      position: fixed; z-index: 1000; top: 0; left: 0;
-      width: 100%; height: 100%;
+      position: fixed;
+      z-index: 1000;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       /* มันจะไปดึงสี --background จาก style.css ของคุณมาใช้ */
-      background: rgba(0, 0, 0, 0.6); 
-      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+
     .modal-content {
       /* มันจะไปดึงสี --surface จาก style.css ของคุณมาใช้ */
-      background: var(--surface); 
+      background: var(--surface);
       color: var(--text-primary);
-      border-radius: var(--radius-md); /* ใช้ --radius-md ของคุณ */
-      width: 90%; max-width: 700px;
-      box-shadow: var(--shadow-lg); /* ใช้ --shadow-lg ของคุณ */
+      border-radius: var(--radius-md);
+      /* ใช้ --radius-md ของคุณ */
+      width: 90%;
+      max-width: 700px;
+      box-shadow: var(--shadow-lg);
+      /* ใช้ --shadow-lg ของคุณ */
       animation: modal-fade-in 0.2s ease-out;
     }
+
     .modal-header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 16px 24px; 
-      border-bottom: 1px solid var(--border-color); /* ใช้ --border-color */
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border-color);
+      /* ใช้ --border-color */
     }
-    .modal-header h2 { margin: 0; }
+
+    .modal-header h2 {
+      margin: 0;
+    }
+
     .modal-close {
-      background: none; border: none; font-size: 28px;
-      color: var(--text-secondary); /* ใช้ --text-secondary */
-      cursor: pointer; padding: 0; line-height: 1;
-    }
-    .modal-body { padding: 24px; }
-    .form-group-col { display: flex; flex-direction: column; }
-    .form-group-col label { margin-bottom: 8px; font-weight: 500; }
-    .form-group-col textarea { min-height: 100px; font-family: monospace; }
-    .output-box {
-      background: #202225; /* สีพื้นหลัง terminal เข้มๆ */
+      background: none;
+      border: none;
+      font-size: 28px;
       color: var(--text-secondary);
-      padding: 12px; border-radius: var(--radius-sm);
-      min-height: 150px; max-height: 400px;
-      overflow-y: auto; white-space: pre-wrap;
-      word-break: break-all; font-family: monospace;
+      /* ใช้ --text-secondary */
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .form-group-col {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group-col label {
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .form-group-col textarea {
+      min-height: 100px;
+      font-family: monospace;
+    }
+
+    .output-box {
+      background: #202225;
+      /* สีพื้นหลัง terminal เข้มๆ */
+      color: var(--text-secondary);
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      min-height: 150px;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-family: monospace;
       font-size: 14px;
     }
+
     .btn.btn-info {
       background: #2563eb;
       color: #ffffff;
     }
+
     .btn.btn-info:hover {
       background: #1d4ed8;
     }
+
     .command-status {
       display: none;
       margin-top: 16px;
     }
+
     .command-status .status-text {
       font-weight: 600;
       font-size: 14px;
       margin-bottom: 8px;
     }
+
     .command-status[data-status="queued"] .status-text,
     .command-status[data-status="running"] .status-text {
       color: var(--text-secondary);
     }
+
     .command-status[data-status="succeeded"] .status-text {
       color: #4caf50;
     }
+
     .command-status[data-status="failed"] .status-text,
     .command-status[data-status="error"] .status-text {
       color: #ff6b6b;
     }
+
     .status-bar {
       position: relative;
       width: 100%;
@@ -89,6 +143,7 @@
       border-radius: 4px;
       overflow: hidden;
     }
+
     .status-bar-fill {
       position: absolute;
       top: 0;
@@ -98,13 +153,27 @@
       background: #4caf50;
       animation: status-progress 1.1s linear infinite;
     }
+
     @keyframes status-progress {
-      from { transform: translateX(-100%); }
-      to { transform: translateX(300%); }
+      from {
+        transform: translateX(-100%);
+      }
+
+      to {
+        transform: translateX(300%);
+      }
     }
+
     @keyframes modal-fade-in {
-      from { opacity: 0; transform: scale(0.95); }
-      to { opacity: 1; transform: scale(1); }
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
     }
   </style>
 </head>
@@ -116,9 +185,9 @@
       <p class="subtitle">Network Topology Discovery & Visualization Platform</p>
     </div>
   </header>
-  
+
   <main class="container">
-  
+
     <!-- Identities Management Section -->
     <section class="card">
       <div class="card-header">
@@ -150,7 +219,7 @@
         </div>
       </div>
     </section>
-  
+
     <!-- Add Device Section -->
     <section class="card">
       <div class="card-header">
@@ -170,7 +239,7 @@
         </div>
       </div>
     </section>
-    
+
     <!-- Device Inventory Section -->
     <section class="card">
       <div class="card-header">
@@ -250,11 +319,11 @@
             <span>End Device</span>
           </div>
         </div>
-        
+
         <div id="graph"></div>
       </div>
     </section>
-    
+
     <!-- Raw Data Section -->
     <section class="card">
       <div class="card-header">
@@ -265,7 +334,7 @@
       </div>
     </section>
   </main>
-  
+
   <footer class="app-footer">
     <p>Topologist © 2025 | Network Topology Discovery Platform</p>
   </footer>
@@ -283,25 +352,25 @@
     // Interval handles for separate auto refresh controls
     let topoAutoTimer = null;
     let tableAutoTimer = null;
-    
+
     // ===== Identities Management =====
     async function listIdentities() {
       const data = await api('/api/identities');
       const tb = document.querySelector('#identitiesTbl tbody');
       tb.innerHTML = '';
-      
+
       // Update the identity dropdown in add device form
       const sel = document.getElementById('identitySelect');
       sel.innerHTML = '<option value="">-- Select Identity --</option>';
-      
+
       data.forEach(id => {
         const tr = document.createElement('tr');
         const isDefault = id.is_default || false;
         const defaultBadge = isDefault ? '<span class="pill s-ready">DEFAULT</span>' : '';
-        const defaultBtn = isDefault 
+        const defaultBtn = isDefault
           ? '<button class="btn btn-sm btn-secondary" onclick="unsetDefault()">Unset Default</button>'
           : `<button class="btn btn-sm btn-secondary" onclick="setDefault('${id._id}')">Set as Default</button>`;
-        
+
         tr.innerHTML = `
           <td>${id.name}</td>
           <td>${id.username}</td>
@@ -312,7 +381,7 @@
           </td>
         `;
         tb.appendChild(tr);
-        
+
         // Add to dropdown
         const opt = document.createElement('option');
         opt.value = id._id;
@@ -320,7 +389,7 @@
         sel.appendChild(opt);
       });
     }
-    
+
     async function setDefault(id) {
       try {
         await api(`/api/identities/${id}/set_default`, { method: 'POST' });
@@ -329,7 +398,7 @@
         alert('Failed to set default: ' + e.message);
       }
     }
-    
+
     async function unsetDefault() {
       try {
         await api('/api/identities/unset_default', { method: 'POST' });
@@ -338,18 +407,18 @@
         alert('Failed to unset default: ' + e.message);
       }
     }
-    
+
     async function addIdentity() {
       const name = document.getElementById('identityName').value.trim();
       const username = document.getElementById('identityUsername').value.trim();
       const password = document.getElementById('identityPassword').value.trim();
       const msg = document.getElementById('identityMsg');
-      
+
       if (!name || !username || !password) {
         msg.textContent = 'Please fill all fields';
         return;
       }
-      
+
       try {
         const r = await api('/api/identities', {
           method: 'POST',
@@ -365,7 +434,7 @@
         msg.textContent = 'Error: ' + e.message;
       }
     }
-    
+
     async function delIdentity(id) {
       if (!confirm('Delete this identity?')) return;
       try {
@@ -375,56 +444,56 @@
         alert('Failed to delete: ' + e.message);
       }
     }
-    
+
     // ===== Devices Management =====
     function pill(t) { const map = { ready: 's-ready', discovered: 's-discovered', unknown: 's-unknown', needs_creds: 's-needs_creds', scanning: 's-scanning', error: 's-error' }; const cls = map[t] || 's-unknown'; return `<span class="pill ${cls}">${t || 'unknown'}</span>`; }
     function escAttr(v) { return (v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;'); }
-    
+
     function formatHostColumn(d) {
       // Display all IPs equally - no indentation, no color difference
       let html = `<div style="font-family: monospace; font-size: 15px;">`;
-      
+
       if (d.host) {
         html += `<div style="margin-bottom: 3px;"><strong>${d.host}</strong></div>`;
       }
-      
+
       const alternates = d.alternate_ips || [];
       alternates.forEach(ip => {
         html += `<div style="margin-bottom: 3px;">${ip}</div>`;
       });
-      
+
       if (!d.host && alternates.length === 0) {
         html += `<div style="color: #999;"><i>(empty)</i></div>`;
       }
-      
+
       html += `</div>`;
       return html;
     }
-    
+
     function formatInterfacesColumn(d) {
       // Display interfaces corresponding to each IP
       const interfaceMap = d.interface_map || {};
       let html = `<div style="font-family: monospace; font-size: 15px;">`;
-      
+
       if (d.host) {
         const iface = interfaceMap[d.host] || '?';
         html += `<div style="margin-bottom: 3px;"><strong>${iface}</strong></div>`;
       }
-      
+
       const alternates = d.alternate_ips || [];
       alternates.forEach(ip => {
         const iface = interfaceMap[ip] || '?';
         html += `<div style="margin-bottom: 3px;">${iface}</div>`;
       });
-      
+
       if (!d.host && alternates.length === 0) {
         html += `<div style="color: #999;"><i>-</i></div>`;
       }
-      
+
       html += `</div>`;
       return html;
     }
-    
+
     async function list() {
       const data = await api('/api/devices'); const tb = document.querySelector('#tbl tbody'); tb.innerHTML = ''; data.forEach(d => {
         const tr = document.createElement('tr'); tr.dataset.id = d._id; tr.innerHTML = `
@@ -441,7 +510,7 @@
     <a class="btn btn-sm btn-info" style="margin-right: 4px;" href="/info?device_id=${d._id}">Info</a>
     <button class="btn btn-sm btn-primary" style="margin-right: 4px;" onclick="openCommandModal('${d._id}', '${d.host}')">CLI</button>
     </td>`; tb.appendChild(tr);
-  
+
       }); attachInlineHandlers();
     }
     function inlineCell(id, field, value, placeholderLabel) { const safe = escAttr(value || ''); const placeholder = safe ? '' : `<span class='inline-placeholder'>(${placeholderLabel || field})</span>`; return `<div class="inline-wrap" data-field="${field}" data-id="${id}"><span class="txt">${safe || ''}${placeholder}</span><input class="inline-editor" value="${safe}" style="display:none;" placeholder="${placeholderLabel || field}"></div>`; }
@@ -460,31 +529,31 @@
       </select>`;
     }
     async function commitInline(id, field, val) { try { await api(`/api/devices/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: val }) }); } catch (e) { console.error('inline update failed', e); } await list(); }
-    async function add() { 
+    async function add() {
       const hostInput = document.getElementById('host');
       const platformInput = document.getElementById('platform');
       const identityInput = document.getElementById('identitySelect');
       const msgSpan = document.getElementById('msg');
-      
-      const payload = { 
-        host: hostInput.value.trim(), 
-        platform: platformInput.value, 
+
+      const payload = {
+        host: hostInput.value.trim(),
+        platform: platformInput.value,
         identity_id: identityInput.value || null,
-        device_type: null 
-      }; 
-      
+        device_type: null
+      };
+
       if (!payload.host) {
         msgSpan.textContent = 'Host/IP required';
         return;
       }
-      
-      const r = await api('/api/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); 
-      msgSpan.textContent = r.message || JSON.stringify(r); 
+
+      const r = await api('/api/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      msgSpan.textContent = r.message || JSON.stringify(r);
       hostInput.value = '';
-      await list(); 
+      await list();
     }
-  async function delDev(id) { await api('/api/devices/' + id, { method: 'DELETE' }); await list(); }
-    
+    async function delDev(id) { await api('/api/devices/' + id, { method: 'DELETE' }); await list(); }
+
     function attachInlineHandlers() {
       document.querySelectorAll('.inline-wrap').forEach(w => {
         const span = w.querySelector('.txt'); const inp = w.querySelector('.inline-editor');
@@ -499,9 +568,9 @@
       document.querySelectorAll('select.devtype-select').forEach(sel => {
         sel.onfocus = () => { sel.classList.add('dropdown-open'); };
         sel.onblur = () => { sel.classList.remove('dropdown-open'); };
-        sel.onchange = async () => { 
+        sel.onchange = async () => {
           sel.classList.remove('dropdown-open');
-          await commitInline(sel.dataset.id, 'device_type', sel.value || null); 
+          await commitInline(sel.dataset.id, 'device_type', sel.value || null);
         };
       });
       // identity dropdowns - populate on focus
@@ -521,9 +590,9 @@
           });
         };
         sel.onblur = () => { sel.classList.remove('dropdown-open'); };
-        sel.onchange = async () => { 
+        sel.onchange = async () => {
           sel.classList.remove('dropdown-open');
-          await commitInline(sel.dataset.id, 'identity_id', sel.value || null); 
+          await commitInline(sel.dataset.id, 'identity_id', sel.value || null);
         };
       });
     }
@@ -547,7 +616,7 @@
         tableAutoTimer = setInterval(tick, 2000);
       }
     }
-    
+
     function toggleTopoAutoRefresh() {
       const chk = document.getElementById('autoRefreshTopoChk');
       // Always clear any existing timer first
@@ -568,7 +637,20 @@
       if (cy || !window.cytoscape) return;
       cy = window.cytoscape({
         container: document.getElementById('graph'),
-        layout: { name: 'cose' },
+        layout: {
+          name: 'cose',
+          animate: true,
+          animationDuration: 500,
+          fit: true,
+          padding: 60,
+          nodeRepulsion: function () { return 600000; },
+          idealEdgeLength: function () { return 180; },
+          edgeElasticity: function () { return 100; },
+          gravity: 0.15,
+          numIter: 1500,
+          nodeDimensionsIncludeLabels: true,
+          randomize: false
+        },
         style: [
           { selector: 'node', style: { 'label': 'data(label)', 'background-color': 'transparent', 'background-opacity': 0, 'background-clip': 'none', 'border-width': 0, 'color': '#FFFFFF', 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 8, 'font-size': 13, 'font-weight': 600, 'text-wrap': 'wrap', 'text-max-width': 90, 'width': 64, 'height': 64, 'text-background-color': '#2F3136', 'text-background-opacity': 0.9, 'text-background-padding': '4px', 'text-background-shape': 'roundrectangle' } },
           // Icon images by device_type
@@ -612,8 +694,9 @@
         // Cytoscape not loaded (likely offline CDN). We still update the raw data and exit gracefully.
         return;
       }
-      const nodes = (data.nodes || []).map(n => ({ data: { id: n.id, label: (n.label || n.id), device_type: n.device_type || '' } }));
-      const edges = (data.links || []).map(e => ({
+
+      const newNodes = (data.nodes || []).map(n => ({ data: { id: n.id, label: (n.label || n.id), device_type: n.device_type || '' } }));
+      const newEdges = (data.links || []).map(e => ({
         data: {
           id: `${e.source}-${e.target}-${e.ifSrc || ''}-${e.ifDst || ''}`,
           source: e.source,
@@ -622,188 +705,258 @@
           ifDst: e.ifDst || ''
         }
       }));
-      cy.elements().remove();
-      cy.add(nodes.concat(edges));
-      cy.layout({ name: 'cose' }).run();
+
+      const newNodeIds = new Set(newNodes.map(n => n.data.id));
+      const newEdgeIds = new Set(newEdges.map(e => e.data.id));
+      const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
+      const existingEdgeIds = new Set(cy.edges().map(e => e.id()));
+
+      // Remove nodes/edges that no longer exist
+      cy.nodes().forEach(n => {
+        if (!newNodeIds.has(n.id())) n.remove();
+      });
+      cy.edges().forEach(e => {
+        if (!newEdgeIds.has(e.id())) e.remove();
+      });
+
+      // Track which nodes are new for layout
+      const addedNodes = [];
+
+      // Add new nodes (preserve positions for existing)
+      newNodes.forEach(nodeData => {
+        const existing = cy.getElementById(nodeData.data.id);
+        if (existing.length === 0) {
+          cy.add(nodeData);
+          addedNodes.push(nodeData.data.id);
+        } else {
+          // Update data if changed (label, device_type)
+          existing.data('label', nodeData.data.label);
+          existing.data('device_type', nodeData.data.device_type);
+        }
+      });
+
+      // Add new edges
+      newEdges.forEach(edgeData => {
+        const existing = cy.getElementById(edgeData.data.id);
+        if (existing.length === 0) {
+          cy.add(edgeData);
+        }
+      });
+
+      // Only run layout if there are new nodes or first load
+      if (addedNodes.length > 0 || cy.nodes().length === newNodes.length && existingNodeIds.size === 0) {
+        // Run layout only on new nodes, keeping existing positions
+        if (addedNodes.length > 0 && addedNodes.length < newNodes.length) {
+          // Partial layout - position new nodes relative to their neighbors
+          const newNodeCollection = cy.collection();
+          addedNodes.forEach(id => newNodeCollection.merge(cy.getElementById(id)));
+
+          newNodeCollection.forEach(node => {
+            // Position near connected nodes
+            const neighbors = node.neighborhood('node');
+            if (neighbors.length > 0) {
+              const avgX = neighbors.reduce((sum, n) => sum + n.position('x'), 0) / neighbors.length;
+              const avgY = neighbors.reduce((sum, n) => sum + n.position('y'), 0) / neighbors.length;
+              node.position({ x: avgX + (Math.random() - 0.5) * 150, y: avgY + (Math.random() - 0.5) * 150 });
+            }
+          });
+        } else {
+          // Full layout for first load
+          cy.layout({
+            name: 'cose',
+            animate: true,
+            animationDuration: 500,
+            fit: true,
+            padding: 60,
+            nodeRepulsion: function () { return 600000; },
+            idealEdgeLength: function () { return 180; },
+            edgeElasticity: function () { return 100; },
+            gravity: 0.15,
+            numIter: 1500,
+            nodeDimensionsIncludeLabels: true,
+            randomize: false
+          }).run();
+        }
+      }
     }
-    let currentManagingDeviceId = null; 
+    let currentManagingDeviceId = null;
     let commandPollTimer = null;
 
-  function updateStatusDisplay(elementId, state, message) {
-    const statusEl = document.getElementById(elementId);
-    if (!statusEl) return;
-    statusEl.setAttribute('data-status', state || '');
-    statusEl.innerHTML = '';
-    if (!message) {
-      statusEl.style.display = 'none';
-      return;
+    function updateStatusDisplay(elementId, state, message) {
+      const statusEl = document.getElementById(elementId);
+      if (!statusEl) return;
+      statusEl.setAttribute('data-status', state || '');
+      statusEl.innerHTML = '';
+      if (!message) {
+        statusEl.style.display = 'none';
+        return;
+      }
+      statusEl.style.display = 'block';
+      const textDiv = document.createElement('div');
+      textDiv.className = 'status-text';
+      textDiv.textContent = message;
+      statusEl.appendChild(textDiv);
+      if (state === 'running') {
+        const bar = document.createElement('div');
+        bar.className = 'status-bar';
+        const fill = document.createElement('div');
+        fill.className = 'status-bar-fill';
+        statusEl.appendChild(bar);
+        bar.appendChild(fill);
+      }
     }
-    statusEl.style.display = 'block';
-    const textDiv = document.createElement('div');
-    textDiv.className = 'status-text';
-    textDiv.textContent = message;
-    statusEl.appendChild(textDiv);
-    if (state === 'running') {
-      const bar = document.createElement('div');
-      bar.className = 'status-bar';
-      const fill = document.createElement('div');
-      fill.className = 'status-bar-fill';
-      statusEl.appendChild(bar);
-      bar.appendChild(fill);
-    }
-  }
-  
-  function openCommandModal(deviceId, hostIp) {
-    currentManagingDeviceId = deviceId;
-    if (commandPollTimer) {
-      clearInterval(commandPollTimer);
-      commandPollTimer = null;
-    }
-    updateStatusDisplay('commandStatus', '', '');
-    document.getElementById('modalTitle').textContent = `Manage: ${hostIp || deviceId}`;
-    document.getElementById('commandInput').value = ''; // เคลียร์ช่อง input
-    document.getElementById('commandOutput').textContent = ''; // เคลียร์ช่อง output
-    document.getElementById('commandModalBackdrop').style.display = 'flex';
-  }
 
-  function closeCommandModal() {
-    currentManagingDeviceId = null;
-    if (commandPollTimer) {
-      clearInterval(commandPollTimer);
-      commandPollTimer = null;
-    }
-    updateStatusDisplay('commandStatus', '', '');
-    document.getElementById('commandModalBackdrop').style.display = 'none';
-  }
-
-  function startCommandPolling(jobId, refreshInventory) {
-    const outputBox = document.getElementById('commandOutput');
-    if (commandPollTimer) {
-      clearInterval(commandPollTimer);
-    }
-    const poll = async () => {
-      try {
-        const status = await api(`/api/device_commands/${jobId}`);
-        if (!status) return;
-        if (status.status === 'queued' || status.status === 'running') {
-          if (status.status === 'running') {
-            updateStatusDisplay('commandStatus', 'running', 'Running CLI command...');
-            outputBox.textContent = status.output || 'Executing...';
-          } else {
-            updateStatusDisplay('commandStatus', 'queued', 'Waiting for worker to start...');
-            outputBox.textContent = status.output || 'Awaiting worker...';
-          }
-          return;
-        }
-        if (status.status === 'succeeded') {
-          updateStatusDisplay('commandStatus', 'succeeded', 'Command completed successfully.');
-          outputBox.textContent = status.output || '(no output)';
-          if (refreshInventory) {
-            await list();
-          }
-        } else if (status.status === 'failed') {
-          updateStatusDisplay('commandStatus', 'failed', 'Command failed.');
-          outputBox.textContent = status.error || 'Command failed';
-        } else {
-          updateStatusDisplay('commandStatus', status.status || '', `Status: ${status.status}`);
-          outputBox.textContent = status.output || `Status: ${status.status}`;
-        }
+    function openCommandModal(deviceId, hostIp) {
+      currentManagingDeviceId = deviceId;
+      if (commandPollTimer) {
         clearInterval(commandPollTimer);
         commandPollTimer = null;
-      } catch (e) {
-        outputBox.textContent = 'Error fetching status: ' + e.message;
-        updateStatusDisplay('commandStatus', 'error', 'Error fetching command status.');
       }
-    };
-    poll();
-    commandPollTimer = setInterval(poll, 1200);
-  }
-
-  async function runCommand() {
-    if (!currentManagingDeviceId) return;
-
-    const command = document.getElementById('commandInput').value;
-    const outputBox = document.getElementById('commandOutput');
-    
-    if (!command) {
-      outputBox.textContent = 'Please enter a command.';
-      return;
+      updateStatusDisplay('commandStatus', '', '');
+      document.getElementById('modalTitle').textContent = `Manage: ${hostIp || deviceId}`;
+      document.getElementById('commandInput').value = ''; // เคลียร์ช่อง input
+      document.getElementById('commandOutput').textContent = ''; // เคลียร์ช่อง output
+      document.getElementById('commandModalBackdrop').style.display = 'flex';
     }
 
-    outputBox.textContent = 'Queueing CLI job...';
-    updateStatusDisplay('commandStatus', 'queued', 'Submitting CLI command...');
-
-    try {
-      const result = await api(`/api/devices/${currentManagingDeviceId}/run_command`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: command })
-      });
-      if (result?.job_id) {
-        const refreshInventory = Boolean(result.refresh_inventory);
-        updateStatusDisplay('commandStatus', 'queued', 'Waiting for worker to start...');
-        startCommandPolling(result.job_id, refreshInventory);
-      } else if (result?.output) {
-        updateStatusDisplay('commandStatus', 'succeeded', 'Command completed successfully.');
-        outputBox.textContent = result.output;
-      } else {
-        outputBox.textContent = 'Unexpected response from server.';
-        updateStatusDisplay('commandStatus', 'error', 'Unexpected response from server.');
+    function closeCommandModal() {
+      currentManagingDeviceId = null;
+      if (commandPollTimer) {
+        clearInterval(commandPollTimer);
+        commandPollTimer = null;
       }
-    } catch (e) {
-      outputBox.textContent = 'Error: ' + e.message;
-      updateStatusDisplay('commandStatus', 'error', 'Failed to submit CLI command.');
+      updateStatusDisplay('commandStatus', '', '');
+      document.getElementById('commandModalBackdrop').style.display = 'none';
     }
-  }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const backdrop = document.getElementById('commandModalBackdrop');
-    if (backdrop) {
-      backdrop.addEventListener('click', (e) => {
-        if (e.target.id === 'commandModalBackdrop') {
-          closeCommandModal();
+    function startCommandPolling(jobId, refreshInventory) {
+      const outputBox = document.getElementById('commandOutput');
+      if (commandPollTimer) {
+        clearInterval(commandPollTimer);
+      }
+      const poll = async () => {
+        try {
+          const status = await api(`/api/device_commands/${jobId}`);
+          if (!status) return;
+          if (status.status === 'queued' || status.status === 'running') {
+            if (status.status === 'running') {
+              updateStatusDisplay('commandStatus', 'running', 'Running CLI command...');
+              outputBox.textContent = status.output || 'Executing...';
+            } else {
+              updateStatusDisplay('commandStatus', 'queued', 'Waiting for worker to start...');
+              outputBox.textContent = status.output || 'Awaiting worker...';
+            }
+            return;
+          }
+          if (status.status === 'succeeded') {
+            updateStatusDisplay('commandStatus', 'succeeded', 'Command completed successfully.');
+            outputBox.textContent = status.output || '(no output)';
+            if (refreshInventory) {
+              await list();
+            }
+          } else if (status.status === 'failed') {
+            updateStatusDisplay('commandStatus', 'failed', 'Command failed.');
+            outputBox.textContent = status.error || 'Command failed';
+          } else {
+            updateStatusDisplay('commandStatus', status.status || '', `Status: ${status.status}`);
+            outputBox.textContent = status.output || `Status: ${status.status}`;
+          }
+          clearInterval(commandPollTimer);
+          commandPollTimer = null;
+        } catch (e) {
+          outputBox.textContent = 'Error fetching status: ' + e.message;
+          updateStatusDisplay('commandStatus', 'error', 'Error fetching command status.');
         }
-      });
+      };
+      poll();
+      commandPollTimer = setInterval(poll, 1200);
     }
-    listIdentities();
-    list();
-    refreshTopo();
-    // Re-enable timers if the toggles were left on before reload
-    if (document.getElementById('autoRefreshTablesChk')?.checked) {
-      toggleTableAutoRefresh();
+
+    async function runCommand() {
+      if (!currentManagingDeviceId) return;
+
+      const command = document.getElementById('commandInput').value;
+      const outputBox = document.getElementById('commandOutput');
+
+      if (!command) {
+        outputBox.textContent = 'Please enter a command.';
+        return;
+      }
+
+      outputBox.textContent = 'Queueing CLI job...';
+      updateStatusDisplay('commandStatus', 'queued', 'Submitting CLI command...');
+
+      try {
+        const result = await api(`/api/devices/${currentManagingDeviceId}/run_command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: command })
+        });
+        if (result?.job_id) {
+          const refreshInventory = Boolean(result.refresh_inventory);
+          updateStatusDisplay('commandStatus', 'queued', 'Waiting for worker to start...');
+          startCommandPolling(result.job_id, refreshInventory);
+        } else if (result?.output) {
+          updateStatusDisplay('commandStatus', 'succeeded', 'Command completed successfully.');
+          outputBox.textContent = result.output;
+        } else {
+          outputBox.textContent = 'Unexpected response from server.';
+          updateStatusDisplay('commandStatus', 'error', 'Unexpected response from server.');
+        }
+      } catch (e) {
+        outputBox.textContent = 'Error: ' + e.message;
+        updateStatusDisplay('commandStatus', 'error', 'Failed to submit CLI command.');
+      }
     }
-    if (document.getElementById('autoRefreshTopoChk')?.checked) {
-      toggleTopoAutoRefresh();
-    }
-  });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const backdrop = document.getElementById('commandModalBackdrop');
+      if (backdrop) {
+        backdrop.addEventListener('click', (e) => {
+          if (e.target.id === 'commandModalBackdrop') {
+            closeCommandModal();
+          }
+        });
+      }
+      listIdentities();
+      list();
+      refreshTopo();
+      // Re-enable timers if the toggles were left on before reload
+      if (document.getElementById('autoRefreshTablesChk')?.checked) {
+        toggleTableAutoRefresh();
+      }
+      if (document.getElementById('autoRefreshTopoChk')?.checked) {
+        toggleTopoAutoRefresh();
+      }
+    });
 
   </script>
   <div id="commandModalBackdrop" class="modal-backdrop" style="display: none;">
-  <div id="commandModal" class="modal-content">
-    
-    <div class="modal-header">
-      <h2 id="modalTitle">Manage Device</h2>
-      <button class="modal-close" onclick="closeCommandModal()">&times;</button>
-    </div>
-    
-    <div class="modal-body">
-      <div class="form-group-col">
-        <label for="commandInput">Enter command(s) (e.g., "show ip int br" or "conf t\nhostname NEW-RTR"):</label>
-        <textarea id="commandInput" class="input" rows="5"></textarea>
-      </div>
-      <button class="btn btn-success" onclick="runCommand()">Run Command</button>
-      <div id="commandStatus" class="command-status"></div>
-      
-      <hr style="margin: 20px 0;">
-      
-      <div class="form-group-col">
-        <label>Output:</label>
-        <pre id="commandOutput" class="output-box"></pre>
-      </div>
-    </div>
+    <div id="commandModal" class="modal-content">
 
+      <div class="modal-header">
+        <h2 id="modalTitle">Manage Device</h2>
+        <button class="modal-close" onclick="closeCommandModal()">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group-col">
+          <label for="commandInput">Enter command(s) (e.g., "show ip int br" or "conf t\nhostname NEW-RTR"):</label>
+          <textarea id="commandInput" class="input" rows="5"></textarea>
+        </div>
+        <button class="btn btn-success" onclick="runCommand()">Run Command</button>
+        <div id="commandStatus" class="command-status"></div>
+
+        <hr style="margin: 20px 0;">
+
+        <div class="form-group-col">
+          <label>Output:</label>
+          <pre id="commandOutput" class="output-box"></pre>
+        </div>
+      </div>
+
+    </div>
   </div>
-</div>
 </body>
 
 </html>
